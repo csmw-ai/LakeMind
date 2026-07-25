@@ -62,7 +62,7 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 | 分布式计算 | **Ray 2.41.0** | 3 节点 12 CPU（已实现） |
 | Embedding | **fastembed** | jinaai/jina-embeddings-v2-base-zh, dim=768（中英混合），由 ModelServing 提供 |
 | LLM 网关 | **litellm** | 内部能力，路由多 provider（不通过 MCP 暴露）（PyPI 包名 `litellm`） |
-| ASR | **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN） |
+| ASR | **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN，fsmn-vad VAD + hotwords + loudnorm 归一化） |
 | MCP SDK | **FastMCP** | tools + resources + prompts 三要素 |
 | Agent 框架 | **LangGraph** | Steward 巡检工作流 |
 

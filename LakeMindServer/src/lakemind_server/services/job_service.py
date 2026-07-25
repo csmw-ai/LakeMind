@@ -16,7 +16,7 @@ def _ulid(prefix: str) -> str:
 
 
 _DEFAULT_RESOURCES = {"cpu": 1, "memory_gb": 1, "timeout_seconds": 3600}
-_TENANT_LIMITS = {"cpu": 16, "memory_gb": 32, "max_concurrent": 10}
+_TENANT_LIMITS = {"cpu": 16, "memory_gb": 32, "max_concurrent": 30}
 
 
 class JobService:

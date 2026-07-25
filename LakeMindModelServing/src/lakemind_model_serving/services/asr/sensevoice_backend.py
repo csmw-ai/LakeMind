@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import time
 from typing import Any
@@ -59,15 +60,22 @@ class SenseVoiceBackend:
         try:
             from funasr import AutoModel
 
-            self._model = AutoModel(
+            vad_model = self._config.get("vad_model", "fsmn-vad")
+            vad_kwargs = self._config.get("vad_kwargs", {})
+            model_kwargs = dict(
                 model="iic/SenseVoiceSmall",
                 disable_update=True,
                 device=self._config.get("device", "cpu"),
                 disable_pbar=True,
                 trust_remote_code=False,
             )
+            if vad_model:
+                model_kwargs["vad_model"] = vad_model
+                model_kwargs["vad_kwargs"] = vad_kwargs
+
+            self._model = AutoModel(**model_kwargs)
             self._status = ASRStatus.READY
-            logger.info("SenseVoice funasr loaded: %s", self._model_id)
+            logger.info("SenseVoice funasr loaded: %s (vad=%s)", self._model_id, vad_model or "off")
         except Exception as exc:
             self._status = ASRStatus.FAILED
             self._error = str(exc)
@@ -92,12 +100,18 @@ class SenseVoiceBackend:
 
         lang_str = (language or self._config.get("language", "zh")).lower()
         itn = use_itn if use_itn is not None else self._config.get("use_itn", True)
+        cfg_hotwords = self._config.get("hotwords", [])
+        all_hotwords = list(set((hotwords or []) + cfg_hotwords))
 
-        result = self._model.generate(
+        generate_kwargs = dict(
             input=audio_path,
             language=lang_str,
             use_itn=itn,
         )
+        if all_hotwords:
+            generate_kwargs["hotword"] = all_hotwords
+
+        result = self._model.generate(**generate_kwargs)
 
         raw_text = result[0]["text"] if result else ""
         text = _clean_tags(raw_text)
@@ -125,9 +139,21 @@ class SenseVoiceBackend:
     ) -> ASRResult:
         tmp_dir = tempfile.mkdtemp(prefix="lakemind-sensevoice-")
         tmp_path = os.path.join(tmp_dir, filename)
+        wav_path = os.path.join(tmp_dir, "audio_16k.wav")
         try:
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", tmp_path,
+                    "-ar", "16000", "-ac", "1",
+                    "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                    "-f", "wav", wav_path,
+                ],
+                capture_output=True, timeout=30,
+            )
+            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 44:
+                return self.transcribe(wav_path, language=language)
             return self.transcribe(tmp_path, language=language)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)

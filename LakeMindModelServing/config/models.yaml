@@ -83,7 +83,8 @@ asr:
     inter_threads: 1
     concurrency: 2
     use_itn: true
-    vad: false
+    vad: true
+    vad_model: "fsmn-vad"
     max_upload_mb: 100
     request_timeout_seconds: 600
   external: []

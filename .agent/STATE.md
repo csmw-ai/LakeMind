@@ -1,6 +1,6 @@
 # STATE.md — LakeMind 项目开发进展状态
 
-> 最后更新：2026-07-24（v0.2.1-ray-fix）
+> 最后更新：2026-07-25（v0.2.2-asr-vad）
 > 总文件：`AGENTS.md`，设计规范：`.agent/DESIGN.md`，开发规范：`.agent/SPEC.md`
 
 ---
@@ -42,6 +42,7 @@
 | **v0.2.0 最终加固** | WP0-WP7 全加固：生命周期+事件+异步边界+向量API+Memory优化+E2E测试 | ✅ 完成 |
 | **v0.2.0 Ray 修复** | 7 bug 修复：check_timeouts cancel + _mark_lost cancel + entrypoint_num_cpus + UNKNOWN 状态 + cleanup_zombies + working_dir + scan_jobs | ✅ 完成 |
 | **v0.2.2 ASR 改进** | ONNX 自定义后端废弁 → funasr 官方库（自带标点 + ITN，PyTorch CPU 推理 ~2s） | ✅ 完成 |
+| **v0.2.2 ASR VAD+Hotwords** | fsmn-vad 语音活动检测 + 30 领域 hotwords + ffmpeg loudnorm 归一化 + job 并发 10→30 | ✅ 完成 |
 | **v0.2.1 Jobs API 修复** | 3 bug：duplicate app=FastAPI() 丢 lifespan + get_skill("latest") 未解析 + S3 URI 未解析 | ✅ 完成 |
 | LakeMindStudio | Tauri 桌面客户端 | ❌ 未开始 |
 
