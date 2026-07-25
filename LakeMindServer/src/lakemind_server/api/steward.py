@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import hashlib
 import ulid
@@ -101,7 +102,8 @@ class StewardFindingService:
 async def list_findings(request: Request):
     ctx = get_security_context(request)
     params = request.query_params
-    return StewardFindingService.list(
+    return await asyncio.to_thread(
+        StewardFindingService.list,
         status=params.get("status"),
         severity=params.get("severity"),
         page=int(params.get("page", "1")),
@@ -113,7 +115,7 @@ async def list_findings(request: Request):
 async def acknowledge_finding(finding_id: str, request: Request):
     ctx = get_security_context(request)
     try:
-        return StewardFindingService.acknowledge(finding_id, ctx.principal_id)
+        return await asyncio.to_thread(StewardFindingService.acknowledge, finding_id, ctx.principal_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -122,10 +124,10 @@ async def acknowledge_finding(finding_id: str, request: Request):
 async def resolve_finding(finding_id: str, request: Request):
     ctx = get_security_context(request)
     body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    return StewardFindingService.resolve(finding_id, body.get("note"))
+    return await asyncio.to_thread(StewardFindingService.resolve, finding_id, body.get("note"))
 
 
 @router.post("/findings/{finding_id}/suppress")
 async def suppress_finding(finding_id: str, request: Request):
     ctx = get_security_context(request)
-    return StewardFindingService.suppress(finding_id)
+    return await asyncio.to_thread(StewardFindingService.suppress, finding_id)

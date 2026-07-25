@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     cfg = load_config()
 
-    app = FastAPI(title="LakeMindModelServing", version="0.3.0")
+    app = FastAPI(title="LakeMindModelServing", version="0.2.0")
     app.state.api_key = cfg.server.api_key
 
     embedding_mgr = EmbeddingManager(cache_dir=cfg.embedding.built_in.cache_dir)
     app.state.embedding_mgr = embedding_mgr
 
-    asr_mgr = ASRManager()
+    asr_mgr = ASRManager(total_concurrency=int(getattr(cfg.asr, "total_concurrency", 2)))
     app.state.asr_mgr = asr_mgr
 
     gateway = ModelGateway(providers=[], gateway_config={
@@ -70,6 +70,6 @@ def _config_to_dict(cfg) -> dict:
     return {
         "llm_providers": serialize(cfg.llm_providers),
         "embedding": {"built_in": serialize(cfg.embedding.built_in)},
-        "asr": {"built_in": serialize(cfg.asr.built_in)},
+        "asr": {"built_in": serialize(cfg.asr.built_in), "total_concurrency": cfg.asr.total_concurrency},
         "gateway": serialize(cfg.gateway),
     }

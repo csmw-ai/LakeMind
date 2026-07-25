@@ -1,5 +1,93 @@
 # Changelog
 
+## v0.2.1-ray-fix (2026-07-24)
+
+### Ray Job Lifecycle — 7 Bug Fixes
+Root cause: platform (LakeMindServer) bugs, not application or Ray. Jobs timed out in DB but Ray processes never cancelled → permanent CPU leak.
+
+- **Bug #4 (CRITICAL)**: `check_timeouts()` now calls `self._backend.cancel(ray_job_id)` before marking TIMED_OUT — prevents zombie Ray processes holding CPU forever
+- **Bug #5**: `_mark_lost()` now calls `cancel()` before marking LOST
+- **Bug #1**: `submit()` uses `entrypoint_num_cpus` / `entrypoint_memory` (correct Ray API) instead of `resources={"CPU":...}` (wrong parameter)
+- **Bug #3**: Unknown Ray status maps to `"UNKNOWN"` instead of `"RUNNING"` — stops inflating RUNNING count; added `NOT_SUBMITTED`/`SUBMITTED` → `QUEUED` mappings
+- **Bug #7**: New `cleanup_zombies()` method runs every sync cycle, cancels Ray processes for TIMED_OUT/LOST attempts
+- **Bug #2**: `submit()` sets `working_dir` in `runtime_env` from `skill_package_uri` (was ignored)
+- **Bug #6**: `scan_jobs()` actually queries Ray dashboard via `JobSubmissionClient.list_jobs()` (was dead code — empty set never populated)
+
+### ASR — faster-whisper Deprecated
+- Replaced faster-whisper with SenseVoice ONNX (iic/SenseVoiceSmall-onnx, CPU)
+- Removed `faster-whisper` from `pyproject.toml` dependencies
+- Removed `asr-model-init` container from `docker-compose.yml`
+- `ASRRouter` only supports `sensevoice-onnx` provider; `FasterWhisperBackend` import removed
+- Added PyAV (`av>=14.0.0`) for WebM/Opus audio decoding
+- Fixed `<unk>` token filtering in CTC decode
+
+### Infrastructure
+- Docker daemon.json: added stable DNS (`223.5.5.5`, `223.6.6.6`, `8.8.8.8`) to fix intermittent ghcr.io DNS failures
+
+## v0.2.0-hardening (2026-07-22)
+
+### Hardening Summary
+- 72 files changed, +1376 / -878
+- pytest: 63 passed (unit) + 33 skipped (E2E, server not running)
+
+### WP0: Version Unification + API Consolidation
+- All components unified to v0.2.0 (Server, ModelServing, 3 MCP, frontend)
+- Deleted old `compute/jobs.py` router, renamed `jobs_v2.py` → `jobs.py`, unified `/api/v1/jobs`
+- Migration 011 drops `ray_jobs` table; removed ray_jobs CRUD from postgres.py + protocols.py
+- 3 ADRs: ADR-020 (runtime facts), ADR-021 (event boundary), ADR-022 (API deprecation)
+
+### WP1: Job Runtime Lifecycle
+- `app.py` lifespan initializes RayExecutionBackend → JobService → JobSyncService
+- `list_jobs` queries `job_runs` with SQL-level tenant filtering + LIMIT/OFFSET pagination
+- `_write_event` on submit/queue/start/fail/cancel/retry/timeout/lost/artifact
+- JobSyncLoop every 3s sync + 30s timeout check
+- `_collect_result` creates job_artifacts on SUCCEEDED
+- Retry restores package_uri, entry_point, secrets, model_binding from original skill
+- Cancel: CANCELLING → Ray Stop → CANCELLED + event
+
+### WP2: Outbox Loop
+- OutboxLoop started in lifespan
+- Default handlers registered: asset.*/knowledge.*/job.*/model.*/config.*/operation.*
+- No handler → FAILED (not DONE), prefix matching
+
+### WP3: Async Boundary
+- 17 API files fixed: all sync I/O wrapped in `asyncio.to_thread`
+- Files: assets, skills, secrets_v2, tenants, steward, observability, events, notifications, security, configuration, audit, operations, instances, sql, metadata, secrets, system
+
+### WP4: Vector Index API + Memory Optimization
+- LanceDB engine: `create_index`/`list_indexes`/`drop_index`
+- vectors.py: 4 new index endpoints (POST/GET/refresh/DELETE)
+- Memory basic.py: persistent `httpx.Client` (replaces per-call `httpx.post`)
+- Memory dedup: PG `memory_hash_index` table with UNIQUE constraint (replaces full table scan)
+- Memory delete: batch `tbl.delete()` for run_id filter (replaces row-by-row)
+
+### WP5: Steward + Monitoring
+- Steward.tsx: removed WebSocket, replaced with fetch POST /steward/chat
+- Monitoring service: real HTTP health probes (replaces `unknown` placeholder)
+
+### WP6: ModelServing
+- chat.py: `stream=true` returns 400 `STREAMING_NOT_SUPPORTED_IN_V0_2_0`
+- ASR docs corrected: SenseVoice → faster-whisper-small across 15 doc files
+
+### WP7: E2E Tests
+- 33 empty `pass` stubs replaced with real HTTP-based tests
+- conftest.py: server availability detection + skip_if_no_server marker
+- golden_path (14), security (6), consistency (7), recovery (6)
+
+### P0 Fixes
+- P0-08: monitoring ray_jobs → job_runs query + real health probes
+- P0-09: memory zero-vector fallback removed; `_embed` now raises on failure
+
+### Pre-existing Fixes
+- Docs: 58 → 68 MCP tools
+- Auth: graceful degradation to tenant_admin when LAKEMIND_V2_AUTH unset
+- registry.py: AES-256-GCM encryption for api_key (`enc:` prefix)
+- CI: build.yml test job runs pytest
+- BFF: COOKIE_SECURE env controls `secure` flag
+- test_actions.py: 32 → 36 actions
+
+---
+
 ## v0.2.0 (2026-07-19)
 
 ### Breaking Changes
@@ -101,7 +189,7 @@
 ## v0.1.0 (2025-07-12)
 
 ### Initial Release
-- MVP：13 容器、10 引擎、58 MCP 工具、Ray 分布式计算
+- MVP：13 容器、10 引擎、68 MCP 工具、Ray 分布式计算
 - 3 MCP 服务：AssetMCP (23 tools) + DataMCP (24 tools) + AdminMCP (21 tools)
 - LakeMindServer：REST API 网关 (40+ 路径) + 10 引擎
 - LakeMindModelServing：litellm + fastembed + FunASR

@@ -203,7 +203,7 @@ LLM 推理网关配置已移至 LakeMindModelServing，见 `LakeMindModelServing
 包含：
 - litellm provider 配置（modelarts/openai/anthropic/ollama）
 - fastembed 嵌入配置
-- FunASR 语音识别配置
+- faster-whisper 语音识别配置
 - 模型注册表（PG model_registry 表）
 
 ## .env 环境变量

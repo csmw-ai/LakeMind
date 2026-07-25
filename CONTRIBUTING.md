@@ -102,7 +102,7 @@ Issue 报告 → 维护者确认 + 分配优先级 → 开发者认领 → 创�
 | 目录 | 职责 |
 |------|------|
 | `LakeMindServer/` | 数据平面（REST API + 10 引擎 + 13 容器） |
-| `LakeMindModelServing/` | 统一模型服务（litellm + fastembed + FunASR） |
+| `LakeMindModelServing/` | 统一模型服务（litellm + fastembed + SenseVoice funasr） |
 | `LakeMindMCP/` | 3 个 MCP 服务 |
 | `LakeMindSteward/` | 管理运维 Agent |
 | `LakeMindMonitor/` | 人类仪表板 |

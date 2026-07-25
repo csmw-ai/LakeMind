@@ -327,12 +327,12 @@ def _l2_sql():
 
 
 def _l2_jobs():
-    r, d = rest_json("POST", "/compute/jobs/", json={"func": "noop", "args": {}})
+    r, d = rest_json("POST", "/jobs", json={"skill_ref": "noop", "inputs": {}})
     jid = d.get("job_id") if d else None
     record("L2", "jobs", "submit", r.status_code == 200 and jid, f"got {r.status_code}")
-    r, d = rest_json("GET", f"/compute/jobs/{jid}")
-    record("L2", "jobs", "status", r.status_code == 200 and d and d.get("status") == "completed", f"got {r.status_code}: {str(d)[:200]}")
-    r, d = rest_json("GET", f"/compute/jobs/{jid}/result")
+    r, d = rest_json("GET", f"/jobs/{jid}")
+    record("L2", "jobs", "status", r.status_code == 200 and d and d.get("status") == "SUCCEEDED", f"got {r.status_code}: {str(d)[:200]}")
+    r, d = rest_json("GET", f"/jobs/{jid}/result")
     record("L2", "jobs", "result", r.status_code == 200, f"got {r.status_code}")
 
 

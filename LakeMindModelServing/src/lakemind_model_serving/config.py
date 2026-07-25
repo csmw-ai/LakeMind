@@ -41,22 +41,26 @@ class ASRBuiltInConfig:
     enabled: bool = True
     required: bool = False
     preload: bool = True
-    provider: str = "faster-whisper"
-    model_alias: str = "whisper-small"
-    model_id: str = "Systran/faster-whisper-small"
-    model_revision: str = "536b0662742c02347bc0e980a01041f333bce120"
-    model_path: str = "/models/asr/faster-whisper-small"
-    language: str = "auto"
+    provider: str = "sensevoice-funasr"
+    model_alias: str = "sensevoice-small"
+    model_id: str = "iic/SenseVoiceSmall"
+    model_revision: str = ""
+    model_path: str = "/models/asr/sensevoice-small"
+    language: str = "zh"
     device: str = "cpu"
     compute_type: str = "int8"
     cpu_threads: int = 4
     num_workers: int = 1
-    concurrency: int = 1
-    beam_size: int = 5
-    vad_filter: bool = True
+    concurrency: int = 2
+    beam_size: int = 1
+    vad_filter: bool = False
     vad_min_silence_duration_ms: int = 500
     condition_on_previous_text: bool = False
     word_timestamps: bool = False
+    intra_threads: int = 2
+    inter_threads: int = 1
+    use_itn: bool = True
+    vad: bool = False
     max_upload_mb: int = 100
     request_timeout_seconds: int = 600
 
@@ -65,6 +69,7 @@ class ASRBuiltInConfig:
 class ASRConfig:
     built_in: ASRBuiltInConfig = field(default_factory=ASRBuiltInConfig)
     external: list = field(default_factory=list)
+    total_concurrency: int = 2
 
 
 @dataclass
@@ -143,26 +148,31 @@ def load_config(path: str | None = None) -> ModelsConfig:
             enabled=abi_raw.get("enabled", True),
             required=abi_raw.get("required", False),
             preload=abi_raw.get("preload", True),
-            provider=abi_raw.get("provider", "faster-whisper"),
-            model_alias=abi_raw.get("model_alias", "whisper-small"),
-            model_id=abi_raw.get("model_id", "Systran/faster-whisper-small"),
-            model_revision=abi_raw.get("model_revision", "536b0662742c02347bc0e980a01041f333bce120"),
-            model_path=abi_raw.get("model_path", "/models/asr/faster-whisper-small"),
-            language=abi_raw.get("language", "auto"),
+            provider=abi_raw.get("provider", "sensevoice-funasr"),
+            model_alias=abi_raw.get("model_alias", "sensevoice-small"),
+            model_id=abi_raw.get("model_id", "iic/SenseVoiceSmall"),
+            model_revision=abi_raw.get("model_revision", ""),
+            model_path=abi_raw.get("model_path", "/models/asr/sensevoice-small"),
+            language=abi_raw.get("language", "zh"),
             device=abi_raw.get("device", "cpu"),
             compute_type=abi_raw.get("compute_type", "int8"),
             cpu_threads=abi_raw.get("cpu_threads", 4),
             num_workers=abi_raw.get("num_workers", 1),
-            concurrency=abi_raw.get("concurrency", 1),
-            beam_size=abi_raw.get("beam_size", 5),
-            vad_filter=abi_raw.get("vad_filter", True),
+            concurrency=abi_raw.get("concurrency", 2),
+            beam_size=abi_raw.get("beam_size", 1),
+            vad_filter=abi_raw.get("vad_filter", False),
             vad_min_silence_duration_ms=abi_raw.get("vad_min_silence_duration_ms", 500),
             condition_on_previous_text=abi_raw.get("condition_on_previous_text", False),
             word_timestamps=abi_raw.get("word_timestamps", False),
+            intra_threads=abi_raw.get("intra_threads", 2),
+            inter_threads=abi_raw.get("inter_threads", 1),
+            use_itn=abi_raw.get("use_itn", True),
+            vad=abi_raw.get("vad", False),
             max_upload_mb=abi_raw.get("max_upload_mb", 100),
             request_timeout_seconds=abi_raw.get("request_timeout_seconds", 600),
         ),
         external=asr_raw.get("external", []),
+        total_concurrency=asr_raw.get("total_concurrency", 2),
     )
 
     reg_raw = raw.get("registry", {})

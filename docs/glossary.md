@@ -138,4 +138,4 @@ Mission Control 页面统一了 v0.1.0 的 Monitor 仪表板。
 | **Valkey** | Redis 兼容的 KV 缓存（BSD 3-Clause） |
 | **fastembed** | 本地嵌入库，ONNX 推理 |
 | **litellm** | LLM 网关，多 provider 路由 |
-| **FunASR** | 本地语音识别（SenseVoice-Small） |
+| **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN） |

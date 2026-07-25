@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import base64
 import threading
 import time
 import uuid
@@ -10,6 +11,48 @@ import psycopg2
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+_MASTER_KEY = None
+_MASTER_KEY_LOADED = False
+
+
+def _get_master_key():
+    global _MASTER_KEY, _MASTER_KEY_LOADED
+    if not _MASTER_KEY_LOADED:
+        key_b64 = os.environ.get("LAKEMIND_MASTER_KEY", "")
+        if key_b64:
+            raw = base64.b64decode(key_b64)
+            if len(raw) == 32:
+                _MASTER_KEY = raw
+        _MASTER_KEY_LOADED = True
+    return _MASTER_KEY
+
+
+def _encrypt_api_key(plaintext: str) -> str:
+    if not plaintext:
+        return ""
+    key = _get_master_key()
+    if not key:
+        return plaintext
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    aesgcm = AESGCM(key)
+    iv = os.urandom(12)
+    ct = aesgcm.encrypt(iv, plaintext.encode(), b"")
+    return "enc:" + base64.b64encode(iv + ct).decode()
+
+
+def _decrypt_api_key(stored: str) -> str:
+    if not stored or not stored.startswith("enc:"):
+        return stored or ""
+    key = _get_master_key()
+    if not key:
+        return ""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    aesgcm = AESGCM(key)
+    raw = base64.b64decode(stored[4:])
+    iv, ct = raw[:12], raw[12:]
+    return aesgcm.decrypt(iv, ct, b"").decode()
 
 
 def _ulid(prefix: str) -> str:
@@ -76,7 +119,10 @@ class ModelRegistry:
     # ── helpers ──
 
     def _row_to_dict(self, row, columns):
-        return dict(zip(columns, row))
+        d = dict(zip(columns, row))
+        if "api_key" in d and d["api_key"]:
+            d["api_key"] = _decrypt_api_key(d["api_key"])
+        return d
 
     def _query(self, sql, params=None, one=False):
         with self._conn() as conn, conn.cursor() as cur:
@@ -116,12 +162,13 @@ class ModelRegistry:
                      embedding_dim: int | None = None, priority: int = 100,
                      status: str = "enabled") -> dict:
         model_id = _ulid("mdl")
+        enc_key = _encrypt_api_key(api_key)
         self._execute(
             """INSERT INTO ms_models
                (model_id, name, model_type, provider, source, litellm_model, api_key, base_url,
                 model_path, model_config, capabilities, context_length, embedding_dim, priority, status)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (model_id, name, model_type, provider, source, litellm_model, api_key, base_url,
+            (model_id, name, model_type, provider, source, litellm_model, enc_key, base_url,
              model_path, json.dumps(model_config or {}), json.dumps(capabilities or []),
              context_length, embedding_dim, priority, status),
         )
@@ -141,6 +188,8 @@ class ModelRegistry:
         for k, v in fields.items():
             if k not in allowed or v is None:
                 continue
+            if k == "api_key":
+                v = _encrypt_api_key(v)
             if k in ("model_config", "capabilities"):
                 v = json.dumps(v)
             sets.append(f"{k} = %s")
@@ -248,6 +297,7 @@ class ModelRegistry:
                 cfg = model.get("model_config", {})
                 if isinstance(cfg, str):
                     cfg = json.loads(cfg)
+                cfg["provider"] = model.get("provider", "faster-whisper")
                 self._asr_mgr.register(model_id=name, model_path=model.get("model_path", ""), config=cfg)
             elif source == "external" and self._gateway:
                 self._gateway.register_model({
@@ -406,13 +456,19 @@ class ModelRegistry:
                     name=name, model_type="asr", provider=asr_cfg.get("provider", "faster-whisper"),
                     source="local", model_path=asr_cfg.get("model_path", ""),
                     model_config={
-                        "language": asr_cfg.get("language", "auto"),
+                        "provider": asr_cfg.get("provider", "sensevoice-funasr"),
+                        "language": asr_cfg.get("language", "zh"),
                         "device": asr_cfg.get("device", "cpu"),
                         "compute_type": asr_cfg.get("compute_type", "int8"),
                         "cpu_threads": asr_cfg.get("cpu_threads", 4),
                         "num_workers": asr_cfg.get("num_workers", 1),
-                        "beam_size": asr_cfg.get("beam_size", 5),
-                        "vad_filter": asr_cfg.get("vad_filter", True),
+                        "concurrency": asr_cfg.get("concurrency", 2),
+                        "beam_size": asr_cfg.get("beam_size", 1),
+                        "vad_filter": asr_cfg.get("vad_filter", False),
+                        "intra_threads": asr_cfg.get("intra_threads", 2),
+                        "inter_threads": asr_cfg.get("inter_threads", 1),
+                        "use_itn": asr_cfg.get("use_itn", True),
+                        "vad": asr_cfg.get("vad", False),
                     },
                     capabilities=["transcribe"], priority=1,
                 )
@@ -433,6 +489,9 @@ class ModelRegistry:
                 imported["profiles"] += 1
             if asr_model and not self.resolve_profile("default-asr"):
                 self.create_profile(name="default-asr", model_type="asr", model_id=asr_model["model_id"])
+                imported["profiles"] += 1
+            if asr_model and not self.resolve_profile("meeting-asr"):
+                self.create_profile(name="meeting-asr", model_type="asr", model_id=asr_model["model_id"])
                 imported["profiles"] += 1
 
             if not self.resolve_profile("default") and chat_model:

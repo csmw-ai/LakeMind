@@ -45,10 +45,10 @@ litellm Router，支持多 provider 路由 + fallback 降级：
 
 ### 4. Agent MCP 接口
 
-58 个 MCP 工具，3 个独立 MCP 服务：
+68 个 MCP 工具，3 个独立 MCP 服务：
 - **AssetMCP** (23 tools, 11 resources, 6 prompts)：知识 / 技能 / 记忆 / 本体
-- **DataMCP** (18 tools, 6 resources, 2 prompts)：Iceberg / DuckDB / LanceDB / S3 / Valkey / Graph
-- **AdminMCP** (17 tools, 6 resources, 2 prompts)：用户 / 租户 / Token / 资产类型 / 平台健康
+- **DataMCP** (24 tools, 6 resources, 2 prompts)：Iceberg / DuckDB / LanceDB / S3 / Valkey / Graph
+- **AdminMCP** (21 tools, 6 resources, 2 prompts)：用户 / 租户 / Token / 资产类型 / 平台健康
 
 ### 5. 认知资产
 
@@ -136,7 +136,7 @@ python scripts/verify_full.py    # 297/297 PASS
 | [快速入门](quickstart.md) | 从零启动 LakeMind |
 | [架构设计](architecture.md) | 两层模型、三 MCP、三大引擎 |
 | [API 参考](api-reference.md) | REST API 40+ 端点 |
-| [MCP 工具](mcp-tools.md) | 58 个工具详细说明 |
+| [MCP 工具](mcp-tools.md) | 68 个工具详细说明 |
 | [配置参考](configuration.md) | engines.yaml 引擎切换 |
 | [部署运维](deployment.md) | 容器管理、故障排查 |
 | [变更日志](changelog.md) | 版本变更记录 |

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from ..security.middleware import get_security_context
@@ -20,7 +21,8 @@ class RotateSecretBody(BaseModel):
 @router.post("")
 async def create_secret(body: CreateSecretBody, request: Request):
     ctx = get_security_context(request)
-    return SecretService.create(
+    return await asyncio.to_thread(
+        SecretService.create,
         scope=body.scope,
         name=body.name,
         value=body.value,
@@ -31,13 +33,13 @@ async def create_secret(body: CreateSecretBody, request: Request):
 @router.get("")
 async def list_secrets(request: Request):
     ctx = get_security_context(request)
-    return {"items": SecretService.list(scope=ctx.tenant_id)}
+    return {"items": await asyncio.to_thread(SecretService.list, scope=ctx.tenant_id)}
 
 
 @router.get("/{scope}/{name}")
 async def get_secret(scope: str, name: str, request: Request):
     ctx = get_security_context(request)
-    row = SecretService.get_ref(scope, name)
+    row = await asyncio.to_thread(SecretService.get_ref, scope, name)
     if row is None:
         raise HTTPException(status_code=404, detail="Secret not found")
     return row
@@ -47,7 +49,7 @@ async def get_secret(scope: str, name: str, request: Request):
 async def rotate_secret(scope: str, name: str, body: RotateSecretBody, request: Request):
     ctx = get_security_context(request)
     try:
-        return SecretService.rotate(scope, name, body.value, ctx.principal_id)
+        return await asyncio.to_thread(SecretService.rotate, scope, name, body.value, ctx.principal_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -56,7 +58,8 @@ async def rotate_secret(scope: str, name: str, body: RotateSecretBody, request: 
 async def delete_secret(scope: str, name: str, request: Request):
     from ..db import execute
     ctx = get_security_context(request)
-    rows = execute(
+    rows = await asyncio.to_thread(
+        execute,
         "DELETE FROM v2_secrets WHERE scope = %s AND name = %s RETURNING secret_id",
         (scope, name),
     )

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
@@ -20,5 +21,5 @@ async def execute_sql(body: SqlBody, request: Request):
     tables = None
     if body.tables:
         tables = {k: pa.Table.from_pylist(v) for k, v in body.tables.items()}
-    results = _eng(request).execute(body.sql, tables)
+    results = await asyncio.to_thread(_eng(request).execute, body.sql, tables)
     return {"results": results, "count": len(results)}

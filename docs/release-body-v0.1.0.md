@@ -5,7 +5,7 @@
 ## 核心能力
 
 - **统一数据底座**：SeaweedFS + PostgreSQL + Iceberg + LanceDB + Valkey + Ray，一套 API 访问全部数据能力
-- **58 个 MCP 工具**：AssetMCP (23) + DataMCP (18) + AdminMCP (17)，Agent 通过 MCP 协议声明式访问认知资产
+- **68 个 MCP 工具**：AssetMCP (23) + DataMCP (24) + AdminMCP (21)，Agent 通过 MCP 协议声明式访问认知资产
 - **分布式计算**：Ray 2.41 集群（3 节点 12 CPU），Skill 代码包作为 Ray job 一等公民运行
 - **统一模型服务**：litellm 网关 + fastembed 嵌入 (jina-zh, dim=768) + FunASR 语音识别
 - **认知资产**：mem0 风格记忆（8 方法）、OKF 知识格式、技能管理（只存取不执行）

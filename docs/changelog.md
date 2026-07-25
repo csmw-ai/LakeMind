@@ -61,7 +61,7 @@
 #### LakeMindModelServing（统一模型服务）
 - litellm Router 替代手写 GatewayLLM，多 provider 路由 + fallback
 - fastembed 本地嵌入（jinaai/jina-embeddings-v2-base-zh, dim=768）
-- FunASR 本地 ASR（SenseVoice-Small，CPU）
+- faster-whisper 本地 ASR（faster-whisper-small, INT8 CPU）
 - OpenAI 兼容 API（/v1/chat/completions, /v1/embeddings, /v1/audio/transcriptions）
 - 端口 :10824，容器 lakemind-model-serving
 

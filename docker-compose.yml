@@ -17,9 +17,6 @@ networks:
     driver: bridge
     internal: true
 
-volumes:
-  asr-models:
-
 services:
   # ══════════════════════════════════════════════════════════════
   # 1. 数据平面
@@ -95,6 +92,7 @@ services:
     image: ${LAKEMIND_REGISTRY}/server-api:${LAKEMIND_VERSION}
     pull_policy: ${PULL_POLICY:-missing}
     container_name: lakemind-server-api
+    command: ["python", "-m", "lakemind_server"]
     environment:
       LAKE_CONFIG: /etc/lakemind/engines.yaml
       API_KEY: "${SERVER_API_KEY}"
@@ -112,6 +110,7 @@ services:
       PG_PASSWORD: ${PG_PASSWORD:-lakemind_pass}
       DATABASE_URL: "postgresql+psycopg2://${PG_USER:-lakemind}:${PG_PASSWORD:-lakemind_pass}@lakemind-postgres:5432/${PG_DB:-lakemind}"
       UVICORN_WORKERS: "${UVICORN_WORKERS:-2}"
+      LAKEMIND_RAY_PIP_DEPS: "httpx"
     ports:
       - "10823:10823"
     volumes:
@@ -255,50 +254,39 @@ services:
   # 3. 模型平面
   # ══════════════════════════════════════════════════════════════
 
-  asr-model-init:
-    image: ${LAKEMIND_REGISTRY}/model-serving:${LAKEMIND_VERSION}
-    pull_policy: ${PULL_POLICY:-missing}
-    container_name: lakemind-asr-model-init
-    command: ["python", "-m", "lakemind_model_serving.tools.prefetch_asr"]
-    environment:
-      ASR_MODEL_DIR: /models/asr/faster-whisper-small
-      ASR_MODEL_ID: "Systran/faster-whisper-small"
-      ASR_MODEL_REVISION: "536b0662742c02347bc0e980a01041f333bce120"
-      ASR_MODEL_BIN_SHA256: "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
-      HF_HUB_OFFLINE: "0"
-    volumes:
-      - asr-models:/models
-    networks: [lakemind]
-    restart: "no"
-    profiles: ["model-download"]
-
   model-serving:
-    image: ${LAKEMIND_REGISTRY}/model-serving:${LAKEMIND_VERSION}
+    image: ${LAKEMIND_REGISTRY}/model-serving:${MODEL_SERVING_VERSION:-${LAKEMIND_VERSION}}
     pull_policy: ${PULL_POLICY:-missing}
     container_name: lakemind-model-serving
     environment:
       LAKE_CONFIG: /etc/lakemind/models.yaml
       MODELSERVING_API_KEY: "${MODELSERVING_API_KEY:-lakemind-modelserving-key}"
       MAAS_API_KEY: "${MAAS_API_KEY}"
+      LAKEMIND_MASTER_KEY: "${LAKEMIND_MASTER_KEY}"
       LITELLM_LOCAL_MODEL_COST_MAP: "True"
       LITELLM_MODEL_COST_MAP_URL: ""
       HF_HUB_OFFLINE: "1"
-      ASR_CONCURRENCY: "1"
       ASR_MAX_UPLOAD_MB: "100"
+      MODELSCOPE_CACHE: "/models/funasr_cache"
     ports:
       - "10824:10824"
     volumes:
       - ./LakeMindModelServing/config/models.yaml:/etc/lakemind/models.yaml:ro
       - ./LakeMindModelServing/data/fastembed_cache:/data/fastembed_cache
-      - asr-models:/models
+      - ./LakeMindModelServing/data/asr-models:/models
     networks: [lakemind]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
+          memory: 6G
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:10824/health/ready')"]
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 60s
+      start_period: 120s
 
   # ══════════════════════════════════════════════════════════════
   # 4. 管理平面 — ControlCenter（单镜像）
@@ -318,6 +306,7 @@ services:
       SESSION_TTL: "3600"
       SESSION_IDLE_TIMEOUT: "1800"
       SESSION_MAX_LIFETIME: "28800"
+      COOKIE_SECURE: "${COOKIE_SECURE:-0}"
     ports:
       - "3000:3000"
     networks: [lakemind]

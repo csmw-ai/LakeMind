@@ -24,6 +24,23 @@ class JobService:
     def __init__(self, backend: ExecutionBackend | None = None) -> None:
         self._backend = backend
 
+    def _write_event(self, job_id: str, event_type: str, attempt_id: str | None = None,
+                     old_status: str | None = None, new_status: str | None = None,
+                     payload: dict | None = None) -> None:
+        seq_row = execute_one(
+            "SELECT COALESCE(max(event_seq), 0) + 1 AS next_seq FROM job_events WHERE job_id = %s",
+            (job_id,),
+        )
+        seq = seq_row["next_seq"] if seq_row else 1
+        event_payload = payload or {}
+        if old_status or new_status:
+            event_payload = {**event_payload, "old_status": old_status, "new_status": new_status}
+        execute(
+            "INSERT INTO job_events (id, job_id, attempt_id, event_type, event_seq, payload) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (_ulid("jev"), job_id, attempt_id, event_type, seq, json.dumps(event_payload)),
+        )
+
     def submit(
         self,
         ctx: SecurityContext,
@@ -33,6 +50,7 @@ class JobService:
         model_profile: str | None = None,
         resource_overrides: dict | None = None,
         idempotency_key: str | None = None,
+        job_name: str | None = None,
     ) -> dict:
         if idempotency_key:
             existing = execute_one(
@@ -43,11 +61,21 @@ class JobService:
                 return existing
 
         _ref = skill_ref.replace("lake://skills/", "")
-        if "@" in _ref:
+        if skill_ref.startswith("s3://"):
+            import re
+            fname = skill_ref.rsplit("/", 1)[-1]
+            m = re.match(r"^(.+?)-v(\d+\.\d+\.\d+)\.zip$", fname)
+            if m:
+                _name, _ver = m.group(1), m.group(2)
+            else:
+                _name, _ver = fname.replace(".zip", ""), "latest"
+        elif "@" in _ref:
             _name, _ver = _ref.rsplit("@", 1)
         else:
             _name, _ver = _ref, "latest"
         skill = SkillService.get_skill(ctx, _name, _ver)
+        if not skill and _ver != "latest":
+            skill = SkillService.get_skill(ctx, _name, "latest")
         if not skill:
             raise ValueError("SKILL_NOT_FOUND")
 
@@ -98,6 +126,7 @@ class JobService:
                 idempotency_key,
             ),
         )
+        self._write_event(job_id, "submitted", payload={"skill_ref": skill_ref})
 
         attempt_id = _ulid("atm")
         execute(
@@ -112,13 +141,18 @@ class JobService:
             "UPDATE job_runs SET status = 'QUEUED', updated_at = now() WHERE job_id = %s",
             (job_id,),
         )
+        self._write_event(job_id, "queued", attempt_id=attempt_id, old_status="SUBMITTED", new_status="QUEUED")
 
         if self._backend:
             try:
+                pkg_uri = skill.get("package_uri", "") or skill.get("source_uri", "") or skill_ref
+                ep = skill.get("entry_point", "main.py")
+                if job_name and ep == "jobs":
+                    ep = f"jobs/{job_name}/main.py"
                 ray_job_id = self._backend.submit(
                     job_id=job_id,
-                    skill_package_uri=skill.get("package_uri", ""),
-                    entry_point=skill.get("entry_point", "main.py"),
+                    skill_package_uri=pkg_uri,
+                    entry_point=ep,
                     inputs=inputs,
                     params=params or {},
                     resources=resource_final,
@@ -133,6 +167,8 @@ class JobService:
                     "UPDATE job_runs SET status = 'RUNNING', updated_at = now() WHERE job_id = %s",
                     (job_id,),
                 )
+                self._write_event(job_id, "started", attempt_id=attempt_id, old_status="QUEUED", new_status="RUNNING",
+                                  payload={"ray_job_id": ray_job_id})
             except Exception as e:
                 execute(
                     "UPDATE job_attempts SET status = 'FAILED', error_message = %s, finished_at = now() WHERE attempt_id = %s",
@@ -142,6 +178,8 @@ class JobService:
                     "UPDATE job_runs SET status = 'FAILED', updated_at = now(), finished_at = now() WHERE job_id = %s",
                     (job_id,),
                 )
+                self._write_event(job_id, "failed", attempt_id=attempt_id, old_status="QUEUED", new_status="FAILED",
+                                  payload={"error": str(e)})
 
         AuditService.record(
             event_type="job.submit", principal_id=ctx.principal_id, tenant_id=ctx.tenant_id,
@@ -166,29 +204,31 @@ class JobService:
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
-        _status_map = {
+        _status_aliases = {
             "completed": "SUCCEEDED", "failed": "FAILED",
             "running": "RUNNING", "submitted": "QUEUED",
             "cancelled": "CANCELLED",
         }
-        _status_rev = {v: k for k, v in _status_map.items()}
-        if ctx.is_platform_admin:
-            query = "SELECT job_id, tenant_id, agent_id AS initiator_id, skill_uri, job_name, task_id, status, created_at FROM ray_jobs WHERE 1=1"
-            params: list = []
-        else:
-            query = "SELECT job_id, tenant_id, agent_id AS initiator_id, skill_uri, job_name, task_id, status, created_at FROM ray_jobs WHERE tenant_id = %s"
-            params = [ctx.tenant_id]
+        where: list[str] = []
+        params: list = []
+        if not ctx.is_platform_admin:
+            where.append("tenant_id = %s")
+            params.append(ctx.tenant_id)
         if status:
-            raw = _status_rev.get(status, status.lower())
-            query += " AND status = %s"
-            params.append(raw)
-        query += " ORDER BY created_at DESC"
-        rows = execute(query, tuple(params))
-        for r in rows:
-            r["status"] = _status_map.get(r.get("status", ""), r.get("status", ""))
-        total = len(rows)
+            formal = _status_aliases.get(status, status.upper())
+            where.append("status = %s")
+            params.append(formal)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        count_row = execute_one(f"SELECT count(*) AS c FROM job_runs{clause}", tuple(params))
+        total = count_row["c"] if count_row else 0
         offset = (page - 1) * page_size
-        return {"items": rows[offset:offset + page_size], "total": total, "page": page, "page_size": page_size}
+        rows = execute(
+            f"SELECT job_id, tenant_id, initiator_id, skill_asset_id, skill_version, "
+            f"status, created_at, updated_at, finished_at, model_binding, resource_final "
+            f"FROM job_runs{clause} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            tuple(params) + (page_size, offset),
+        )
+        return {"items": rows, "total": total, "page": page, "page_size": page_size}
 
     def cancel(self, ctx: SecurityContext, job_id: str) -> dict:
         job = self.get_job(ctx, job_id)
@@ -199,6 +239,7 @@ class JobService:
             "UPDATE job_runs SET status = 'CANCELLING', updated_at = now() WHERE job_id = %s",
             (job_id,),
         )
+        self._write_event(job_id, "cancelling", old_status=job["status"], new_status="CANCELLING")
 
         if self._backend:
             attempt = execute_one(
@@ -219,6 +260,7 @@ class JobService:
             "UPDATE job_attempts SET status = 'CANCELLED', finished_at = now() WHERE job_id = %s AND status IN ('QUEUED','RUNNING')",
             (job_id,),
         )
+        self._write_event(job_id, "cancelled", old_status="CANCELLING", new_status="CANCELLED")
 
         AuditService.record(ctx, action="job.cancel", resource_type="job_run", resource_id=job_id)
         return self.get_job(ctx, job_id)
@@ -243,18 +285,24 @@ class JobService:
             "UPDATE job_runs SET status = 'QUEUED', updated_at = now(), finished_at = NULL WHERE job_id = %s",
             (job_id,),
         )
+        self._write_event(job_id, "retried", attempt_id=attempt_id, old_status=job["status"], new_status="QUEUED",
+                          payload={"attempt_number": next_num})
 
         if self._backend:
             skill = execute_one("SELECT * FROM assets WHERE asset_id = %s", (job["skill_asset_id"],))
+            skill_package_uri = (skill.get("package_uri", "") or skill.get("source_uri", "")) if skill else ""
+            entry_point = skill.get("entry_point", "main.py") if skill else "main.py"
+            secret_refs = json.loads(job["secret_refs"]) if job.get("secret_refs") and isinstance(job["secret_refs"], str) else (job.get("secret_refs") or [])
+            resolved_secrets = resolve_job_secrets(skill.get("manifest", {}) if skill else {}, ctx, f"job:{job.get('skill_asset_id', 'unknown')}") if secret_refs else {}
             try:
                 ray_job_id = self._backend.submit(
                     job_id=job_id,
-                    skill_package_uri="",
-                    entry_point="main.py",
+                    skill_package_uri=skill_package_uri,
+                    entry_point=entry_point,
                     inputs=job["inputs"] if isinstance(job["inputs"], dict) else json.loads(job["inputs"]),
                     params=job["params"] if isinstance(job["params"], dict) else json.loads(job["params"]),
                     resources=job["resource_final"] if isinstance(job["resource_final"], dict) else json.loads(job["resource_final"]),
-                    secrets={},
+                    secrets=resolved_secrets,
                     model_binding=job["model_binding"] if isinstance(job["model_binding"], dict) else (json.loads(job["model_binding"]) if job["model_binding"] else None),
                 )
                 execute(
@@ -265,11 +313,15 @@ class JobService:
                     "UPDATE job_runs SET status = 'RUNNING', updated_at = now() WHERE job_id = %s",
                     (job_id,),
                 )
+                self._write_event(job_id, "started", attempt_id=attempt_id, old_status="QUEUED", new_status="RUNNING",
+                                  payload={"ray_job_id": ray_job_id})
             except Exception as e:
                 execute(
                     "UPDATE job_attempts SET status = 'FAILED', error_message = %s, finished_at = now() WHERE attempt_id = %s",
                     (str(e), attempt_id),
                 )
+                self._write_event(job_id, "failed", attempt_id=attempt_id, old_status="QUEUED", new_status="FAILED",
+                                  payload={"error": str(e)})
 
         AuditService.record(ctx, action="job.retry", resource_type="job_run", resource_id=job_id)
         return self.get_job(ctx, job_id)

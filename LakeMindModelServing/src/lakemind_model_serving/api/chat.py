@@ -24,6 +24,14 @@ class ChatCompletionRequest(BaseModel):
 @router.post("/v1/chat/completions")
 async def chat_completions(body: ChatCompletionRequest, request: Request):
     check_auth(request)
+    if body.stream:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "STREAMING_NOT_SUPPORTED_IN_V0_2_0",
+                "message": "Streaming is not supported in v0.2.0. Set stream=false.",
+            },
+        )
     gateway = request.app.state.gateway
     registry = request.app.state.registry
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
@@ -39,7 +47,7 @@ async def chat_completions(body: ChatCompletionRequest, request: Request):
             model=target_model,
             temperature=body.temperature,
             max_tokens=body.max_tokens,
-            stream=body.stream,
+            stream=False,
         )
         return result
     except Exception as e:

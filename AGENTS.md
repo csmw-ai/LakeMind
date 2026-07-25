@@ -15,7 +15,7 @@ Agent 通过 MCP 检索和存取知识、记忆、技能等认知资产，通过
 | 目录 | 平面 | 职责 | 状态 |
 |------|------|------|------|
 | `LakeMindServer/` | 数据平面 | 存储与计算底座（REST API + 10 引擎 + 13 容器） | ✅ 已完成 |
-| `LakeMindModelServing/` | 模型平面 | 统一模型服务（litellm 网关 + fastembed 嵌入 + FunASR 语音识别） | ✅ 已完成 |
+| `LakeMindModelServing/` | 模型平面 | 统一模型服务（litellm 网关 + fastembed 嵌入 + SenseVoice funasr 语音识别） | ✅ 已完成 |
 | `LakeMindMCP/` | 运行平面 | 3 MCP 编排（docker-compose + --profile all） | ✅ 已完成 |
 | `LakeMindMCP/LakeMindAssetMCP/` | 运行平面 | 资产面 MCP（知识/记忆/技能/本体），23 tools | ✅ 已完成 |
 | `LakeMindMCP/LakeMindDataMCP/` | 运行平面 | 数据面 MCP（通过 REST API 透传，不做语义包装），24 tools | ✅ 已完成 |
@@ -38,7 +38,7 @@ LakeMindServer (:10823)  ← 统一 REST API，10 引擎
   SeaweedFS · PostgreSQL · Valkey · Ray
           │
           ▼
-LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + FunASR）
+LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + SenseVoice funasr）
   Server / Ray workers ──→ ModelServing（嵌入 / LLM / ASR）
 ```
 
@@ -62,7 +62,7 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Fu
 | 分布式计算 | **Ray 2.41.0** | 3 节点 12 CPU（已实现） |
 | Embedding | **fastembed** | jinaai/jina-embeddings-v2-base-zh, dim=768（中英混合），由 ModelServing 提供 |
 | LLM 网关 | **litellm** | 内部能力，路由多 provider（不通过 MCP 暴露）（PyPI 包名 `litellm`） |
-| ASR | **faster-whisper** | 本地语音识别（whisper-large-v3-turbo, INT8 CPU）（PyPI 包名 `faster-whisper`） |
+| ASR | **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN） |
 | MCP SDK | **FastMCP** | tools + resources + prompts 三要素 |
 | Agent 框架 | **LangGraph** | Steward 巡检工作流 |
 
@@ -122,5 +122,5 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Fu
 | `.agent/SPEC.md` | 开发规范（包结构、代码约定、Docker、验证） |
 | `.agent/STATE.md` | 当前状态（进度、容器、验证结果、已知问题） |
 | `docs/` | 发布文档（architecture, api-reference, mcp-tools, etc.） |
-| `LakeMindModelServing/` | 统一模型服务（litellm + fastembed + FunASR 部署文档） |
+| `LakeMindModelServing/` | 统一模型服务（litellm + fastembed + SenseVoice funasr 部署文档） |
 | `reports/` | 验证报告与设计文档 |

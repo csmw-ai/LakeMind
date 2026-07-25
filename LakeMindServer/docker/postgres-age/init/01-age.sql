@@ -92,23 +92,3 @@ CREATE TABLE IF NOT EXISTS secret_access_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_secret_log_tenant ON secret_access_log(tenant_id, accessed_at);
-
--- Ray job records
-CREATE TABLE IF NOT EXISTS ray_jobs (
-    job_id          TEXT PRIMARY KEY,
-    tenant_id       TEXT NOT NULL,
-    agent_id        TEXT NOT NULL,
-    skill_uri       TEXT NOT NULL,
-    job_name        TEXT NOT NULL,
-    entrypoint      TEXT,
-    params          JSONB DEFAULT '{}',
-    task_id         TEXT,
-    status          TEXT DEFAULT 'submitted',
-    ray_job_id      TEXT,
-    result_uri      TEXT,
-    created_at      TIMESTAMPTZ DEFAULT now(),
-    completed_at    TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_ray_jobs_tenant ON ray_jobs(tenant_id, status);
-CREATE INDEX IF NOT EXISTS idx_ray_jobs_task ON ray_jobs(tenant_id, task_id);

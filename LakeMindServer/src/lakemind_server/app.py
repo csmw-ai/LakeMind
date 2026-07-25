@@ -1,11 +1,93 @@
 from __future__ import annotations
 import os
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from .config import load_config, ServerConfig
 from .engines import Engines
 from .auth import verify_api_key, get_tenant_context
-from .api import objects, tables, vectors, kv, graph, sql, jobs, memory, metadata, system, secrets
+
+logger = logging.getLogger(__name__)
+
+cfg = load_config()
+engines = Engines(cfg)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from .plugins.compute.distributed.ray_execution_backend import RayExecutionBackend
+    from .services.job_service import JobService
+    from .services.job_sync_service import JobSyncService
+    from .outbox.worker import register_default_handlers
+
+    ray_backend = None
+    try:
+        ray_backend = RayExecutionBackend()
+        logger.info("RayExecutionBackend initialized: %s", ray_backend._dashboard)
+    except Exception as e:
+        logger.warning("Ray backend unavailable: %s", e)
+    app.state.ray_backend = ray_backend
+    app.state.job_service = JobService(backend=ray_backend)
+    app.state.job_sync_service = JobSyncService(backend=ray_backend)
+    app.state.job_runtime_healthy = ray_backend is not None
+
+    register_default_handlers()
+
+    try:
+        app.state.job_sync_service.recover_on_startup()
+        logger.info("Job recovery completed")
+    except Exception as e:
+        logger.warning("Job recovery failed: %s", e)
+
+    from .services.monitoring_service import start_monitoring
+    start_monitoring(app)
+
+    tasks = [
+        asyncio.create_task(_job_sync_loop(app)),
+        asyncio.create_task(_outbox_loop(app)),
+    ]
+    app.state._bg_tasks = tasks
+
+    yield
+
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _job_sync_loop(app: FastAPI) -> None:
+    sync_service = app.state.job_sync_service
+    sync_interval = float(os.environ.get("JOB_SYNC_INTERVAL", "3"))
+    timeout_interval = float(os.environ.get("JOB_TIMEOUT_INTERVAL", "30"))
+    last_timeout = 0.0
+    while True:
+        try:
+            await asyncio.to_thread(sync_service.sync_all)
+            await asyncio.to_thread(sync_service.cleanup_zombies)
+            now = asyncio.get_event_loop().time()
+            if now - last_timeout >= timeout_interval:
+                await asyncio.to_thread(sync_service.check_timeouts)
+                last_timeout = now
+        except Exception as e:
+            logger.warning("Job sync loop error: %s", e)
+        await asyncio.sleep(sync_interval)
+
+
+async def _outbox_loop(app: FastAPI) -> None:
+    from .outbox.worker import process_batch
+    interval = float(os.environ.get("OUTBOX_INTERVAL", "1"))
+    batch_size = int(os.environ.get("OUTBOX_BATCH_SIZE", "10"))
+    while True:
+        try:
+            await asyncio.to_thread(process_batch, batch_size)
+        except Exception as e:
+            logger.warning("Outbox loop error: %s", e)
+        await asyncio.sleep(interval)
+
+
+from .api import objects, tables, vectors, kv, graph, sql, memory, metadata, system, secrets
 from .api import security as security_api
 from .api import configuration as config_api
 from .api import audit as audit_api
@@ -15,7 +97,7 @@ from .api import assets as assets_api
 from .api import knowledge as knowledge_api
 from .api import skills as skills_api
 from .api import memories as memories_api
-from .api import jobs_v2 as jobs_v2_api
+from .api import jobs as jobs_api
 from .api import secrets_v2 as secrets_v2_api
 from .api import tenants as tenants_api
 from .api import steward as steward_api
@@ -27,7 +109,7 @@ from .api import search as search_api
 cfg = load_config()
 engines = Engines(cfg)
 
-app = FastAPI(title="LakeMind Server", version="2.0.0")
+app = FastAPI(title="LakeMind Server", version="0.2.0", lifespan=lifespan)
 
 app.state.cfg = cfg
 app.state.engines = engines
@@ -50,14 +132,14 @@ async def auth_middleware(request: Request, call_next):
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     from .security.context import SecurityContext
-    from .security.actions import ALL_ACTIONS
+    from .security.actions import actions_for_roles
     import uuid
     request.state.security_context = SecurityContext(
         principal_id="legacy-api-key",
         principal_type="api_key",
         tenant_id=request.headers.get("X-Tenant-Id", "default"),
-        roles=["platform_admin"],
-        scopes=ALL_ACTIONS,
+        roles=["tenant_admin"],
+        scopes=actions_for_roles(["tenant_admin"]),
         token_id="legacy",
         request_id=request.headers.get("X-Request-Id", str(uuid.uuid4())),
         correlation_id=request.headers.get("X-Correlation-Id"),
@@ -88,7 +170,6 @@ app.include_router(vectors.router, prefix="/api/v1/storage/vectors", tags=["stor
 app.include_router(kv.router, prefix="/api/v1/storage/kv", tags=["storage-kv"])
 app.include_router(graph.router, prefix="/api/v1/storage/graph", tags=["storage-graph"])
 app.include_router(sql.router, prefix="/api/v1/compute/sql", tags=["compute-sql"])
-app.include_router(jobs.router, prefix="/api/v1/compute/jobs", tags=["compute-jobs"])
 app.include_router(memory.router, prefix="/api/v1/cognitive/memory", tags=["cognitive-memory"])
 app.include_router(metadata.router, prefix="/api/v1/metadata", tags=["metadata"])
 app.include_router(secrets.router, prefix="/api/v1/metadata/secrets", tags=["metadata-secrets"])
@@ -105,7 +186,7 @@ app.include_router(knowledge_api.router, prefix="/api/v1/knowledge", tags=["know
 app.include_router(skills_api.router, prefix="/api/v1/skills", tags=["skills"])
 app.include_router(memories_api.router, prefix="/api/v1/memories", tags=["memories"])
 
-app.include_router(jobs_v2_api.router, prefix="/api/v1/jobs", tags=["jobs"])
+app.include_router(jobs_api.router, prefix="/api/v1/jobs", tags=["jobs"])
 
 app.include_router(secrets_v2_api.router, prefix="/api/v1/secrets", tags=["secrets-v2"])
 
@@ -121,8 +202,8 @@ app.include_router(search_api.router, prefix="/api/v1/search", tags=["search"])
 
 @app.get("/api/v1/health", tags=["system"])
 async def health():
-    return {"status": "ok", "version": "2.0.0"}
-
-
-from .services.monitoring_service import start_monitoring
-start_monitoring(app)
+    return {
+        "status": "ok",
+        "version": "0.2.0",
+        "job_runtime": "healthy" if getattr(app.state, "job_runtime_healthy", False) else "degraded",
+    }

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lakemind-data-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "LakeMind Data MCP — 数据面"
 requires-python = ">=3.11"
 authors = [{ name = "LakeMind Team" }]

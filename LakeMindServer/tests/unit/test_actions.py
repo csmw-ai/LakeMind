@@ -4,10 +4,10 @@ from lakemind_server.security.actions import Action, ALL_ACTIONS
 
 class TestActions:
     def test_action_count(self):
-        assert len(Action) == 32
+        assert len(Action) == 36
 
     def test_all_actions_matches_enum(self):
-        assert len(ALL_ACTIONS) == 32
+        assert len(ALL_ACTIONS) == 36
         assert all(isinstance(a, str) for a in ALL_ACTIONS)
 
     def test_action_values_are_unique(self):

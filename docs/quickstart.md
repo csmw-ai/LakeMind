@@ -36,7 +36,7 @@ docker compose --env-file .env --profile ray --profile all up -d
 | 容器 | 端口 | 用途 |
 |------|------|------|
 | lakemind-server-api | 10823 | REST API 网关 (40+ 路径) |
-| lakemind-model-serving | 10824 | 统一模型服务（litellm + fastembed + FunASR） |
+| lakemind-model-serving | 10824 | 统一模型服务（litellm + fastembed + SenseVoice funasr） |
 | lakemind-postgres | 5432 | 统一元数据 + 图存储 |
 | lakemind-seaweedfs | 8333 | S3 对象存储 |
 | lakemind-valkey | 6379 | TTL KV 缓存 |
@@ -125,6 +125,6 @@ curl -X POST http://localhost:10824/v1/chat/completions \
 
 - [架构设计](architecture.md) — 理解两层模型、三 MCP、三大引擎
 - [API 参考](api-reference.md) — REST API 40+ 端点完整文档
-- [MCP 工具](mcp-tools.md) — 58 个 MCP 工具详细说明
+- [MCP 工具](mcp-tools.md) — 68 个 MCP 工具详细说明
 - [配置参考](configuration.md) — engines.yaml 引擎切换指南
 - [部署运维](deployment.md) — 容器管理、引擎切换、故障排查

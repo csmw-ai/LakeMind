@@ -172,32 +172,32 @@ class ServerClient:
 
     # ── Jobs ──
     async def job_submit(self, func: str, args: dict = None) -> dict:
-        return await self.post("/api/v1/compute/jobs/", json={"func": func, "args": args or {}})
+        return await self.post("/api/v1/jobs", json={"skill_ref": func, "inputs": args or {}})
 
     async def job_status(self, job_id: str) -> dict:
-        return await self.get(f"/api/v1/compute/jobs/{job_id}")
+        return await self.get(f"/api/v1/jobs/{job_id}")
 
     async def job_result(self, job_id: str) -> dict:
-        return await self.get(f"/api/v1/compute/jobs/{job_id}/result")
+        return await self.get(f"/api/v1/jobs/{job_id}/result")
 
     async def job_submit_skill(self, skill_uri: str, job_name: str,
                                params: dict = {}, task_id: str = "",
                                env_overrides: dict = {}, resources: dict = {}) -> dict:
-        return await self.post("/api/v1/compute/jobs/submit", json={
-            "skill_uri": skill_uri, "job_name": job_name, "params": params,
-            "task_id": task_id, "env_overrides": env_overrides, "resources": resources})
+        return await self.post("/api/v1/jobs", json={
+            "skill_ref": skill_uri, "inputs": params, "params": {},
+            "resource_overrides": resources, "job_name": job_name})
 
     async def job_get(self, job_id: str) -> dict:
-        return await self.get(f"/api/v1/compute/jobs/{job_id}")
+        return await self.get(f"/api/v1/jobs/{job_id}")
 
     async def job_cancel(self, job_id: str) -> dict:
-        return await self.post(f"/api/v1/compute/jobs/{job_id}/cancel")
+        return await self.post(f"/api/v1/jobs/{job_id}/cancel")
 
     async def job_list(self, status: str = "") -> dict:
         params = {}
         if status:
             params["status"] = status
-        return await self.get("/api/v1/compute/jobs", params=params)
+        return await self.get("/api/v1/jobs", params=params)
 
     async def skill_job_list(self, skill_uri: str) -> dict:
         from .context import get_identity

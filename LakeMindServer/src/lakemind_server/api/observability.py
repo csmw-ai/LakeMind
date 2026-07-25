@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
@@ -27,7 +28,8 @@ async def query_metrics(request: Request):
     scope_filter = ctx.accessible_scope_filter()
     scope_type = scope_filter.get("scope_type")
     scope_id = scope_filter.get("scope_id")
-    result = MetricsService.query(
+    result = await asyncio.to_thread(
+        MetricsService.query,
         metric_name=metric_name, labels=labels,
         from_time=from_time, to_time=to_time, page_size=page_size,
     )
@@ -49,7 +51,7 @@ async def write_metrics(request: Request):
     body = await request.json()
     metrics = body.get("metrics", [])
     try:
-        count = MetricsService.write_batch(metrics)
+        count = await asyncio.to_thread(MetricsService.write_batch, metrics)
     except CardinalityViolation as exc:
         raise HTTPException(status_code=400, detail={"error": "CARDINALITY_VIOLATION", "forbidden": list(exc.forbidden)})
     return {"written": count}

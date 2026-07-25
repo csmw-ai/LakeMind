@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request, UploadFile, File
 from ..security.middleware import get_security_context, require_action
 from ..services.asset_service import AssetService
@@ -14,14 +15,15 @@ async def create_asset(request: Request):
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     body = await request.json()
-    return AssetService.create_asset(ctx, **body)
+    return await asyncio.to_thread(AssetService.create_asset, ctx, **body)
 
 
 @router.get("")
 async def list_assets(request: Request):
     ctx = get_security_context(request)
     params = request.query_params
-    return AssetService.list_assets(
+    return await asyncio.to_thread(
+        AssetService.list_assets,
         ctx,
         asset_type=params.get("type"),
         status=params.get("status"),
@@ -32,39 +34,39 @@ async def list_assets(request: Request):
 @router.get("/{asset_id}")
 async def get_asset(asset_id: str, request: Request):
     ctx = get_security_context(request)
-    return AssetService.get_asset(ctx, asset_id)
+    return await asyncio.to_thread(AssetService.get_asset, ctx, asset_id)
 
 
 @router.patch("/{asset_id}")
 async def update_asset(asset_id: str, request: Request):
     ctx = get_security_context(request)
     body = await request.json()
-    return AssetService.update_asset(ctx, asset_id, body.get("metadata", {}))
+    return await asyncio.to_thread(AssetService.update_asset, ctx, asset_id, body.get("metadata", {}))
 
 
 @router.delete("/{asset_id}")
 async def delete_asset(asset_id: str, request: Request):
     ctx = get_security_context(request)
-    return AssetService.delete_asset(ctx, asset_id)
+    return await asyncio.to_thread(AssetService.delete_asset, ctx, asset_id)
 
 
 @router.get("/{asset_id}/bindings")
 async def get_bindings(asset_id: str, request: Request):
     ctx = get_security_context(request)
-    return AssetService.get_bindings(asset_id)
+    return await asyncio.to_thread(AssetService.get_bindings, asset_id)
 
 
 @router.get("/{asset_id}/lineage")
 async def get_lineage(asset_id: str, request: Request):
     ctx = get_security_context(request)
-    return AssetService.get_lineage(asset_id)
+    return await asyncio.to_thread(AssetService.get_lineage, asset_id)
 
 
 @router.get("/{asset_id}/health")
 async def get_health(asset_id: str, request: Request):
     ctx = get_security_context(request)
     from ..db import execute_one
-    asset = execute_one("SELECT * FROM assets WHERE asset_id = %s", (asset_id,))
+    asset = await asyncio.to_thread(execute_one, "SELECT * FROM assets WHERE asset_id = %s", (asset_id,))
     if asset is None:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="ASSET_NOT_FOUND")
@@ -100,4 +102,4 @@ async def get_health(asset_id: str, request: Request):
 @router.post("/{asset_id}/reindex")
 async def reindex_asset(asset_id: str, request: Request):
     ctx = get_security_context(request)
-    return AssetService.reindex(ctx, asset_id)
+    return await asyncio.to_thread(AssetService.reindex, ctx, asset_id)

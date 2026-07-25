@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Request
 from ..security.middleware import get_security_context
@@ -11,7 +12,8 @@ router = APIRouter()
 async def query_audit(request: Request):
     ctx = get_security_context(request)
     params = request.query_params
-    return AuditService.query(
+    return await asyncio.to_thread(
+        AuditService.query,
         event_type=params.get("event_type"),
         principal_id=params.get("principal_id"),
         tenant_id=params.get("tenant_id", ctx.tenant_id if not ctx.is_platform_admin else None),
@@ -33,7 +35,8 @@ async def query_audit(request: Request):
 async def export_audit(request: Request):
     ctx = get_security_context(request)
     params = request.query_params
-    return AuditService.export(
+    return await asyncio.to_thread(
+        AuditService.export,
         event_type=params.get("event_type"),
         tenant_id=params.get("tenant_id", ctx.tenant_id if not ctx.is_platform_admin else None),
         start_time=datetime.fromisoformat(params["start_time"]) if params.get("start_time") else None,

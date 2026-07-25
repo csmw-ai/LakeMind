@@ -32,7 +32,7 @@
 │  SeaweedFS (:8333) · PostgreSQL (:5432) · Valkey (:6379) │
 │  Ray (:8265, 3 节点 12 CPU)                              │
 │               LakeMindModelServing (:10824)               │
-│  litellm · fastembed · FunASR                            │
+│  litellm · fastembed · SenseVoice funasr                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -52,7 +52,7 @@
 | AdminMCP | 8403 | `admin` | Steward | 用户/租户/Token/健康 | 21 | 2 | 6 |
 
 > **MCP 三要素**：每个 MCP 都有 Tools（操作）+ Resources（只读浏览）+ Prompts（使用指南）。
-> 合计：58 tools, 10 prompts, 23 resources。
+> 合计：68 tools, 10 prompts, 23 resources。
 
 ---
 
@@ -106,7 +106,7 @@ X-Scopes: asset,data,admin
 | 容器 | 镜像 | 端口 | 用途 |
 |------|------|------|------|
 | server-api | lakemind/server-api | 10823 | REST API + 9 引擎 |
-| model-serving | lakemind/model-serving | 10824 | 统一模型服务（litellm + fastembed + FunASR） |
+| model-serving | lakemind/model-serving | 10824 | 统一模型服务（litellm + fastembed + SenseVoice funasr） |
 | postgres | lakemind/postgres-age:16 | 5432 | Metadata Hub |
 | seaweedfs | chrislusf/seaweedfs:latest | 8333 | S3 对象存储 |
 | valkey | valkey/valkey:8.0 | 6379 | TTL KV 缓存（BSD 3-Clause） |

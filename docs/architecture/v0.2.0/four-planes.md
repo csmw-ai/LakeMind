@@ -67,7 +67,7 @@
 **职责**：执行 Job（以 Skill 为定义的确定性任务）、模型推理、数据解析。受 Control Plane 调度，通过受控契约访问 Data & Index Plane。
 
 **包含组件**：
-- LakeMindModelServing (10824) — litellm + fastembed + FunASR
+- LakeMindModelServing (10824) — litellm + fastembed + SenseVoice funasr
 - Ray Head + Workers — 分布式计算
 
 **禁止事项**：

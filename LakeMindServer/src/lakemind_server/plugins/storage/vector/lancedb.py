@@ -107,3 +107,49 @@ class LanceVectorStorage:
                 return True
             except Exception:
                 return False
+
+    def create_index(self, db: str, name: str, vector_column: str = "vector",
+                     index_type: str = "IVF_PQ", num_partitions: int = 128,
+                     num_sub_vectors: int = 16) -> dict:
+        lock = self._get_lock(db, name)
+        with lock:
+            tbl = self._table(db, name)
+            tbl.create_index(
+                metric="L2",
+                vector_column_name=vector_column,
+                num_partitions=num_partitions,
+                num_sub_vectors=num_sub_vectors,
+                replace=True,
+            )
+            return {
+                "db": db, "table": name, "index_type": index_type,
+                "num_partitions": num_partitions, "num_sub_vectors": num_sub_vectors,
+                "status": "active", "indexed_rows": tbl.count_rows(),
+            }
+
+    def list_indexes(self, db: str, name: str) -> list[dict]:
+        lock = self._get_lock(db, name)
+        with lock:
+            tbl = self._table(db, name)
+            try:
+                idx_stats = tbl.list_indices()
+                return [
+                    {
+                        "name": getattr(s, "name", f"idx_{i}"),
+                        "columns": getattr(s, "columns", []),
+                        "index_type": getattr(s, "index_type", "IVF_PQ"),
+                    }
+                    for i, s in enumerate(idx_stats)
+                ]
+            except Exception:
+                return []
+
+    def drop_index(self, db: str, name: str, index_name: str = "vector_idx") -> dict:
+        lock = self._get_lock(db, name)
+        with lock:
+            tbl = self._table(db, name)
+            try:
+                tbl.drop_index(index_name)
+                return {"status": "dropped", "index_name": index_name}
+            except Exception:
+                return {"status": "not_found", "index_name": index_name}

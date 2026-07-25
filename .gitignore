@@ -18,6 +18,8 @@ node_modules/
 
 # 本地环境
 .env
+.env.prod
+.env.*
 
 # 数据卷（docker-compose bind mount）
 data/
@@ -28,3 +30,4 @@ data/
 
 # 日志
 *.log
+reports/

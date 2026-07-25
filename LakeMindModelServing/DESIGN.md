@@ -13,7 +13,7 @@ LakeMindModelServing 是 LakeMind 的**一级模型服务模块**，与 LakeMind
 |------|------|
 | 统一模型网关 | litellm 作为顶层路由，统一 LLM chat/embedding 调用接口 |
 | 自带嵌入服务 | fastembed 本地嵌入（jina-embeddings-v2-base-zh, dim=768），ONNX CPU |
-| 自带 ASR 服务 | FunASR 本地语音识别（SenseVoice-Small，多语种），CPU |
+| 自带 ASR 服务 | faster-whisper 本地语音识别（faster-whisper-small，多语种），INT8 CPU |
 | 外部模型注册 | 运行时注册外部 LLM / embedding / ASR provider，无需重启 |
 | OpenAI 兼容 API | 对外暴露 OpenAI 兼容接口，降低接入成本 |
 
@@ -36,7 +36,7 @@ LakeMindModelServing 是 LakeMind 的**一级模型服务模块**，与 LakeMind
 │                      数据平面                                │
 │  LakeMindServer (:10823)          LakeMindModelServing (:10824) │
 │  REST API + 9 引擎                统一模型服务                  │
-│  SeaweedFS · PG · Valkey          litellm + fastembed + FunASR │
+│  SeaweedFS · PG · Valkey          litellm + fastembed + faster-whisper │
 │  Ray (调用 ModelServing)          外部模型注册                  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -58,7 +58,7 @@ LakeMindServer 从 11 引擎降为 9 引擎（移除 `cognitive.llm` 和 `cognit
 │  LLM     │ Embedding│   ASR    │   模型注册管理      │
 │  Providers│ Service  │ Service  │   (runtime CRUD)   │
 │          │          │          │                    │
-│ OpenAI   │ fastembed│ FunASR   │  PG 持久化注册表    │
+│ OpenAI   │ fastembed│faster-whis│  PG 持久化注册表    │
 │ Anthropic│ (本地CPU)│ (本地CPU) │  热加载到 litellm  │
 │ Ollama   │ 外部API  │ 外部API  │                    │
 │ ModelArts│          │          │                    │
@@ -83,7 +83,7 @@ LakeMindServer 从 11 引擎降为 9 引擎（移除 `cognitive.llm` 和 `cognit
 | 模型网关 | **litellm** | MIT | 统一 LLM 路由、fallback、负载均衡 |
 | Web 框架 | **FastAPI** | MIT | REST API 服务 |
 | 本地嵌入 | **fastembed** | Apache 2.0 | jina-embeddings-v2-base-zh, ONNX CPU, dim=768 |
-| 本地 ASR | **FunASR** | Apache 2.0 (model) / MIT (code) | SenseVoice-Small，多语种语音识别 |
+| 本地 ASR | **faster-whisper** | MIT | faster-whisper-small，多语种语音识别，INT8 CPU |
 | 元数据 | **PostgreSQL** | PostgreSQL License (BSD-like) | 模型注册表持久化（复用 LakeMindServer 的 PG 实例） |
 | 配置 | **PyYAML + Pydantic** | MIT/BSD | YAML 配置 + 环境变量插值 |
 
@@ -101,18 +101,18 @@ LakeMindServer 从 11 引擎降为 9 引擎（移除 `cognitive.llm` 和 `cognit
 | 维护成本 | 自维护 | 社区维护（活跃） |
 | 代码量 | ~350 行 | 0 行（pip install） |
 
-### 3.2 为什么选 FunASR
+### 3.2 为什么选 faster-whisper
 
-| 对比项 | FunASR (SenseVoice) | faster-whisper | whisper.cpp |
-|--------|---------------------|----------------|-------------|
-| 许可证 | Apache 2.0 | MIT | MIT |
-| 中文识别 | 优秀（阿里达摩院） | 一般 | 一般 |
-| 多语种 | 支持 50+ | 支持 99 | 支持 99 |
-| CPU 性能 | 快（CTranslate2） | 快 | 最快（C++） |
+| 对比项 | faster-whisper | FunASR | whisper.cpp |
+|--------|-----------------|---------------------|-------------|
+| 许可证 | MIT | 自定义 FunASR License | MIT |
+| 中文识别 | 一般 | 优秀（阿里达摩院） | 一般 |
+| 多语种 | 支持 99 | 支持 50+ | 支持 99 |
+| CPU 性能 | 快（CTranslate2 INT8） | 快 | 最快（C++） |
 | Python 集成 | 原生 | 原生 | 需 binding |
-| 模型大小 | ~234MB (Small) | ~244MB (base) | ~147MB (base) |
+| 模型大小 | ~244MB (small) | ~234MB (Small) | ~147MB (base) |
 
-选 FunASR SenseVoice-Small：中文最优、Apache 2.0、原生 Python、CPU 可用。
+选 faster-whisper：MIT 许可、原生 Python、CPU INT8 可用、无外部依赖（不耦合 ModelScope）。
 
 ---
 
@@ -124,7 +124,7 @@ LakeMindServer 从 11 引擎降为 9 引擎（移除 `cognitive.llm` 和 `cognit
 |------|------|------|
 | POST | `/v1/chat/completions` | LLM 对话补全（litellm 路由） |
 | POST | `/v1/embeddings` | 文本嵌入（本地 fastembed 或外部 API） |
-| POST | `/v1/audio/transcriptions` | 语音转文字（本地 FunASR 或外部 API） |
+| POST | `/v1/audio/transcriptions` | 语音转文字（本地 faster-whisper 或外部 API） |
 | GET | `/v1/models` | 列出全部已注册模型 |
 
 ### 4.2 管理端点
@@ -180,9 +180,9 @@ POST /v1/embeddings
 POST /v1/audio/transcriptions
 Content-Type: multipart/form-data
 file: audio.wav
-model: sensevoice-small
+model: whisper-small
 language: auto
-→ {"text": "识别出的文字内容", "model": "sensevoice-small"}
+→ {"text": "识别出的文字内容", "model": "whisper-small"}
 ```
 
 **注册外部模型**：
@@ -282,10 +282,10 @@ embedding:
 asr:
   built_in:
     enabled: true
-    provider: "funasr"
-    model: "iic/SenseVoiceSmall"
+    provider: "faster-whisper"
+    model: "Systran/faster-whisper-small"
     language: "auto"
-    cache_dir: "/data/funasr_cache"
+    cache_dir: "/data/faster-whisper_cache"
   external: []
     # - model_id: "whisper-api"
     #   endpoint: "https://api.openai.com/v1/audio/transcriptions"
@@ -318,14 +318,14 @@ registry:
 LakeMindModelServing/
 ├── DESIGN.md                      # 本文件
 ├── docker-compose.yml             # 独立 compose
-├── Dockerfile                     # python:3.12-slim + litellm + fastembed + funasr
+├── Dockerfile                     # python:3.12-slim + litellm + fastembed + faster-whisper
 ├── pyproject.toml                 # 依赖声明
 ├── .env.example                   # 环境变量模板
 ├── config/
 │   └── models.yaml                # 模型服务配置
 ├── data/
 │   ├── fastembed_cache/           # fastembed 模型缓存
-│   └── funasr_cache/              # FunASR 模型缓存
+│   └── faster-whisper_cache/       # faster-whisper 模型缓存
 └── src/
     └── lakemind_model_serving/
         ├── __init__.py
@@ -345,7 +345,7 @@ LakeMindModelServing/
         └── services/
             ├── __init__.py
             ├── embedding.py       # fastembed 本地嵌入服务
-            └── asr.py             # FunASR 本地语音识别服务
+            └── asr.py             # faster-whisper 本地语音识别服务
 ```
 
 ---
@@ -428,25 +428,21 @@ class ASRService:
 
     def _ensure_model(self):
         if self._model is None:
-            from funasr import AutoModel
-            self._model = AutoModel(
-                model=self._model_name,
-                vad_model="fsmn-vad",
-                punc_model="ct-punc",
-                disable_update=True,
+            from faster_whisper import WhisperModel
+            self._model = WhisperModel(
+                model_size_or_path=self._model_name,
+                device="cpu",
+                compute_type="int8",
             )
 
     def transcribe(self, audio_path: str) -> str:
         self._ensure_model()
-        result = self._model.generate(
-            input=audio_path,
-            language=self._language,
-        )
-        return result[0]["text"] if result else ""
+        segments, _info = self._model.transcribe(audio_path, language=self._language)
+        return "".join(seg.text for seg in segments).strip()
 
     def health(self) -> bool:
         try:
-            import funasr
+            import faster_whisper
             return True
         except Exception:
             return False
@@ -460,7 +456,7 @@ PG 表 `model_registry`：
 |----|------|------|
 | `model_id` | VARCHAR(128) PK | 模型唯一标识 |
 | `type` | VARCHAR(16) | llm / embedding / asr |
-| `provider` | VARCHAR(64) | openai / anthropic / ollama / fastembed / funasr / external |
+| `provider` | VARCHAR(64) | openai / anthropic / ollama / fastembed / faster-whisper / external |
 | `litellm_model` | VARCHAR(256) | litellm 模型名（如 `openai/gpt-4o`） |
 | `api_key` | TEXT | API Key（加密存储） |
 | `base_url` | VARCHAR(512) | 自定义 endpoint（可选） |
@@ -495,7 +491,7 @@ EXPOSE 10824
 CMD ["python", "-m", "lakemind_model_serving"]
 ```
 
-> `ffmpeg` 用于 FunASR 音频处理。
+> `ffmpeg` 用于 faster-whisper 音频处理。
 
 ### 8.2 docker-compose.yml
 
@@ -521,7 +517,7 @@ services:
     volumes:
       - ./config/models.yaml:/etc/lakemind/models.yaml:ro
       - ./data/fastembed_cache:/data/fastembed_cache
-      - ./data/funasr_cache:/data/funasr_cache
+      - ./data/faster-whisper_cache:/data/faster-whisper_cache
     networks: [lakemind]
     restart: unless-stopped
     healthcheck:
@@ -556,7 +552,7 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "litellm>=1.40",
     "fastembed>=0.4",
-    "funasr>=1.0",
+    "faster-whisper>=1.0",
     "cryptography>=42.0",
 ]
 
@@ -642,7 +638,7 @@ cd ../LakeMindMonitor; docker compose up -d --build
 
 | 文档 | 变更 |
 |------|------|
-| `AGENTS.md` | 包结构表增加 LakeMindModelServing 行；访问拓扑图增加 :10824；技术栈表增加 litellm/FunASR；引擎清单 11→9 |
+| `AGENTS.md` | 包结构表增加 LakeMindModelServing 行；访问拓扑图增加 :10824；技术栈表增加 litellm/faster-whisper；引擎清单 11→9 |
 | `.agent/DESIGN.md` | 架构图增加 ModelServing；引擎清单更新；容器清单增加；设计决策记录增加 |
 | `.agent/SPEC.md` | 仓库结构增加 LakeMindModelServing；技术栈表增加 litellm/FunASr；启动顺序更新 |
 | `.agent/STATE.md` | 增加 LakeMindModelServing 进度段；容器状态增加 model-serving |
@@ -676,7 +672,7 @@ cd ../LakeMindMonitor; docker compose up -d --build
 | 2 | 实现 config.py + models.yaml 配置加载 | 20min |
 | 3 | 实现 gateway.py（litellm Router 封装） | 30min |
 | 4 | 实现 services/embedding.py（fastembed 服务） | 15min |
-| 5 | 实现 services/asr.py（FunASR 服务） | 30min |
+| 5 | 实现 services/asr.py（faster-whisper 服务） | 30min |
 | 6 | 实现 registry.py（PG 模型注册表） | 30min |
 | 7 | 实现 api/ 全部端点（chat, embeddings, audio, models, health） | 45min |
 | 8 | 实现 auth.py + app.py | 20min |
@@ -697,5 +693,5 @@ cd ../LakeMindMonitor; docker compose up -d --build
 | 1 | docker-compose 独立还是并入 Server？ | 独立（方案 A），模块边界清晰 | ? |
 | 2 | LakeMindServer 的 `/api/v1/cognitive/llm/*` 和 `/api/v1/cognitive/embedding/*` 端点保留为代理还是删除？ | 删除，消费者直接调 ModelServing | ? |
 | 3 | 模型注册表是否复用 LakeMindServer 的 PG 实例？ | 复用（同一 PG，新表 `model_registry`） | ? |
-| 4 | FunASR 是否需要 GPU 支持？ | MVP 用 CPU，生产可加 GPU profile | ? |
+| 4 | faster-whisper 是否需要 GPU 支持？ | MVP 用 CPU INT8，生产可加 GPU profile | ? |
 | 5 | litellm 是否启用缓存？ | MVP 不启用（`cache: false`），生产可加 Redis 缓存 | ? |

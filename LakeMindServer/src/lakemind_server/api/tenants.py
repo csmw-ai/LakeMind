@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import ulid
 from datetime import datetime, timezone
@@ -206,7 +207,8 @@ async def create_tenant(request: Request):
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     body = await request.json()
     try:
-        return TenantService.create(
+        return await asyncio.to_thread(
+            TenantService.create,
             name=body["name"],
             admin_principal_id=body["admin_principal_id"],
             quotas=body.get("quotas"),
@@ -222,9 +224,10 @@ async def create_tenant(request: Request):
 async def list_tenants(request: Request):
     ctx = get_security_context(request)
     if not ctx.is_platform_admin:
-        return {"items": [TenantService.get(ctx.tenant_id)], "total": 1, "page": 1, "page_size": 50}
+        item = await asyncio.to_thread(TenantService.get, ctx.tenant_id)
+        return {"items": [item], "total": 1, "page": 1, "page_size": 50}
     params = request.query_params
-    return TenantService.list_tenants(page=int(params.get("page", "1")), page_size=int(params.get("page_size", "50")))
+    return await asyncio.to_thread(TenantService.list_tenants, page=int(params.get("page", "1")), page_size=int(params.get("page_size", "50")))
 
 
 @router.get("/{tenant_id}")
@@ -233,7 +236,7 @@ async def get_tenant(tenant_id: str, request: Request):
     if not ctx.can_access_tenant(tenant_id):
         raise HTTPException(status_code=403, detail="TENANT_SCOPE_VIOLATION")
     try:
-        return TenantService.get(tenant_id)
+        return await asyncio.to_thread(TenantService.get, tenant_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="TENANT_NOT_FOUND")
 
@@ -244,7 +247,7 @@ async def update_tenant(tenant_id: str, request: Request):
     if not ctx.is_platform_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     body = await request.json()
-    return TenantService.update(tenant_id, quotas=body.get("quotas"), allowed_models=body.get("allowed_models"))
+    return await asyncio.to_thread(TenantService.update, tenant_id, quotas=body.get("quotas"), allowed_models=body.get("allowed_models"))
 
 
 @router.post("/{tenant_id}/suspend")
@@ -252,7 +255,7 @@ async def suspend_tenant(tenant_id: str, request: Request):
     ctx = get_security_context(request)
     if not ctx.is_platform_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
-    return TenantService.suspend(tenant_id, ctx.principal_id)
+    return await asyncio.to_thread(TenantService.suspend, tenant_id, ctx.principal_id)
 
 
 @router.post("/{tenant_id}/resume")
@@ -260,7 +263,7 @@ async def resume_tenant(tenant_id: str, request: Request):
     ctx = get_security_context(request)
     if not ctx.is_platform_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
-    return TenantService.resume(tenant_id, ctx.principal_id)
+    return await asyncio.to_thread(TenantService.resume, tenant_id, ctx.principal_id)
 
 
 @router.post("/{tenant_id}/archive")
@@ -268,7 +271,7 @@ async def archive_tenant(tenant_id: str, request: Request):
     ctx = get_security_context(request)
     if not ctx.is_platform_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
-    return TenantService.archive(tenant_id, ctx.principal_id)
+    return await asyncio.to_thread(TenantService.archive, tenant_id, ctx.principal_id)
 
 
 @router.get("/{tenant_id}/memberships")
@@ -276,7 +279,7 @@ async def list_memberships(tenant_id: str, request: Request):
     ctx = get_security_context(request)
     if not ctx.can_access_tenant(tenant_id):
         raise HTTPException(status_code=403, detail="TENANT_SCOPE_VIOLATION")
-    return TenantService.list_memberships(tenant_id)
+    return await asyncio.to_thread(TenantService.list_memberships, tenant_id)
 
 
 @router.post("/{tenant_id}/memberships")
@@ -285,7 +288,7 @@ async def add_membership(tenant_id: str, request: Request):
     if not ctx.is_tenant_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     body = await request.json()
-    return TenantService.add_membership(tenant_id, body["principal_id"], body.get("role_name", "agent"), ctx.principal_id)
+    return await asyncio.to_thread(TenantService.add_membership, tenant_id, body["principal_id"], body.get("role_name", "agent"), ctx.principal_id)
 
 
 @router.post("/{tenant_id}/memberships/{membership_id}/revoke")
@@ -294,6 +297,6 @@ async def revoke_membership(tenant_id: str, membership_id: str, request: Request
     if not ctx.is_tenant_admin:
         raise HTTPException(status_code=403, detail="PERMISSION_DENIED")
     try:
-        return TenantService.revoke_membership(tenant_id, membership_id, ctx.principal_id)
+        return await asyncio.to_thread(TenantService.revoke_membership, tenant_id, membership_id, ctx.principal_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="MEMBERSHIP_NOT_FOUND")

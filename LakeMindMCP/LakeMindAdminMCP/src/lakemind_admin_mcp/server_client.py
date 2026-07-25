@@ -170,13 +170,13 @@ class ServerClient:
 
     # ── Jobs ──
     async def job_submit(self, func: str, args: dict = None) -> dict:
-        return await self.post("/api/v1/compute/jobs/", json={"func": func, "args": args or {}})
+        return await self.post("/api/v1/jobs", json={"skill_ref": func, "inputs": args or {}})
 
     async def job_status(self, job_id: str) -> dict:
-        return await self.get(f"/api/v1/compute/jobs/{job_id}")
+        return await self.get(f"/api/v1/jobs/{job_id}")
 
     async def job_result(self, job_id: str) -> dict:
-        return await self.get(f"/api/v1/compute/jobs/{job_id}/result")
+        return await self.get(f"/api/v1/jobs/{job_id}/result")
 
     # ── Embedding (via ModelServing) ──
     async def embed(self, texts: list[str]) -> dict:

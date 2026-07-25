@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from ..services.instance_registry import InstanceRegistry
@@ -22,23 +23,24 @@ class HeartbeatRequest(BaseModel):
 @router.get("")
 async def list_instances(request: Request):
     service_type = request.query_params.get("service_type")
-    return InstanceRegistry.list_instances(service_type)
+    return await asyncio.to_thread(InstanceRegistry.list_instances, service_type)
 
 
 @router.get("/{instance_id}")
 async def get_instance(instance_id: str):
-    return InstanceRegistry.get_instance(instance_id)
+    return await asyncio.to_thread(InstanceRegistry.get_instance, instance_id)
 
 
 @router.post("")
 async def register_instance(body: RegisterRequest):
     existing = None
     if body.instance_id:
-        existing = InstanceRegistry.get_instance(body.instance_id)
+        existing = await asyncio.to_thread(InstanceRegistry.get_instance, body.instance_id)
     if existing:
-        InstanceRegistry.heartbeat(body.instance_id, "healthy")
+        await asyncio.to_thread(InstanceRegistry.heartbeat, body.instance_id, "healthy")
         return existing
-    return InstanceRegistry.register(
+    return await asyncio.to_thread(
+        InstanceRegistry.register,
         service_type=body.service_type,
         version=body.version,
         endpoint=body.endpoint,
@@ -48,8 +50,8 @@ async def register_instance(body: RegisterRequest):
 
 @router.put("/{instance_id}/heartbeat")
 async def heartbeat_instance(instance_id: str, body: HeartbeatRequest):
-    existing = InstanceRegistry.get_instance(instance_id)
+    existing = await asyncio.to_thread(InstanceRegistry.get_instance, instance_id)
     if not existing:
         raise HTTPException(status_code=404, detail="INSTANCE_NOT_FOUND")
-    InstanceRegistry.heartbeat(instance_id, body.health_status, body.active_revision_id)
+    await asyncio.to_thread(InstanceRegistry.heartbeat, instance_id, body.health_status, body.active_revision_id)
     return {"ok": True}

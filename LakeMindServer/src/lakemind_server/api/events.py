@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request, HTTPException
 from ..security.middleware import get_security_context
 from ..services.event_service import EventService
@@ -15,7 +16,8 @@ async def query_events(request: Request):
     resource_type = params.get("resource_type")
     page_size = int(params.get("page_size", "100"))
     scope_filter = ctx.accessible_scope_filter()
-    result = EventService.query(
+    result = await asyncio.to_thread(
+        EventService.query,
         after_sequence=after_sequence,
         event_type=event_type,
         resource_type=resource_type,
@@ -46,7 +48,8 @@ async def event_stream(request: Request):
     async def generate():
         nonlocal last_seq
         while True:
-            result = EventService.query(
+            result = await asyncio.to_thread(
+                EventService.query,
                 after_sequence=last_seq,
                 scope_type=scope_type,
                 scope_id=scope_id,

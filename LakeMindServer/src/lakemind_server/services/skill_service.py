@@ -123,8 +123,17 @@ class SkillService:
 
     @staticmethod
     def get_skill(ctx: SecurityContext, name: str, version: str) -> dict | None:
+        _cols = "a.*, s.manifest, s.code_checksum, s.publish_status, s.trust_level, s.entry_point"
+        if version == "latest":
+            return execute_one(
+                f"SELECT {_cols} "
+                "FROM assets a JOIN skill_meta s ON a.asset_id = s.asset_id "
+                "WHERE a.tenant_id = %s AND a.name = %s AND a.deleted_at IS NULL "
+                "ORDER BY a.created_at DESC LIMIT 1",
+                (ctx.tenant_id, name),
+            )
         return execute_one(
-            "SELECT a.*, s.manifest, s.code_checksum, s.publish_status, s.trust_level "
+            f"SELECT {_cols} "
             "FROM assets a JOIN skill_meta s ON a.asset_id = s.asset_id "
             "WHERE a.tenant_id = %s AND a.name = %s AND a.version = %s",
             (ctx.tenant_id, name, version),

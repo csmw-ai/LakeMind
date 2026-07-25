@@ -1,6 +1,5 @@
 ﻿import { Card, Input, Button, List, Typography } from 'antd';
-import { useState, useRef } from 'react';
-import { api } from '../api/client';
+import { useState } from 'react';
 
 const { Text } = Typography;
 
@@ -10,36 +9,26 @@ export default function Steward() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
 
-  function connect() {
-    if (wsRef.current) return;
-    const bffUrl = import.meta.env.VITE_BFF_URL || 'http://localhost:3001';
-    const wsUrl = bffUrl.replace('http', 'ws') + '/ws';
-    const ws = new WebSocket(wsUrl);
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'pong' && data.data) {
-          setMessages(prev => [...prev, { role: 'assistant', content: data.data }]);
-        }
-      } catch {}
-      setLoading(false);
-    };
-    wsRef.current = ws;
-  }
-
-  function send() {
-    if (!input.trim()) return;
-    setMessages(prev => [...prev, { role: 'user', content: input }]);
-    setLoading(true);
-    connect();
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(input);
-    } else {
-      setTimeout(() => wsRef.current?.send(input), 500);
-    }
+  async function send() {
+    const message = input.trim();
+    if (!message) return;
+    setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInput('');
+    setLoading(true);
+    try {
+      const resp = await fetch('/steward/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      const data = await resp.json();
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response || JSON.stringify(data) }]);
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Steward 请求失败，请稍后重试。' }]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

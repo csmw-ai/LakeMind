@@ -69,8 +69,11 @@ class ReconciliationService:
         )
         if active_ray_jobs:
             try:
-                import ray
-                ray_dashboard_jobs = set()
+                import os
+                from ray.job_submission import JobSubmissionClient
+                dashboard_url = os.environ.get("LAKEMIND_RAY_DASHBOARD", "http://ray-head:8265")
+                client = JobSubmissionClient(dashboard_url)
+                ray_dashboard_jobs = {j["submission_id"] for j in client.list_jobs()}
                 for rj in active_ray_jobs:
                     if rj["ray_job_id"] not in ray_dashboard_jobs:
                         drifts.append(ReconciliationService._record_drift(

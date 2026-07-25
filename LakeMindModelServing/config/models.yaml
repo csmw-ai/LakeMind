@@ -68,26 +68,22 @@ embedding:
     #   dim: 1536
 
 asr:
+  total_concurrency: 2
   built_in:
     enabled: true
     required: false
     preload: true
-    provider: "faster-whisper"
-    model_alias: "whisper-small"
-    model_id: "Systran/faster-whisper-small"
-    model_revision: "536b0662742c02347bc0e980a01041f333bce120"
-    model_path: "/models/asr/faster-whisper-small"
-    language: "auto"
+    provider: "sensevoice-funasr"
+    model_alias: "sensevoice-small"
+    model_id: "iic/SenseVoiceSmall"
+    model_path: "/models/asr/sensevoice-small"
+    language: "zh"
     device: "cpu"
-    compute_type: "int8"
-    cpu_threads: 4
-    num_workers: 1
-    concurrency: 1
-    beam_size: 5
-    vad_filter: true
-    vad_min_silence_duration_ms: 500
-    condition_on_previous_text: false
-    word_timestamps: false
+    intra_threads: 2
+    inter_threads: 1
+    concurrency: 2
+    use_itn: true
+    vad: false
     max_upload_mb: 100
     request_timeout_seconds: 600
   external: []

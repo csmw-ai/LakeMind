@@ -44,7 +44,7 @@ LakeMind 采用三平面分层架构：
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-> Embedding (fastembed) / LLM 网关 (litellm) / ASR (FunASR) 已独立为 **LakeMindModelServing (:10824)**，不在 Server 进程内。
+> Embedding (fastembed) / LLM 网关 (litellm) / ASR (SenseVoice funasr) 已独立为 **LakeMindModelServing (:10824)**，不在 Server 进程内。
 
 ## 2. 2 层数据类型
 
@@ -112,7 +112,7 @@ LakeMindServer 是数据平面的核心，提供 REST API 网关和 3 大引擎�
 |------|------|------|-----------|
 | 记忆引擎 | BasicMemory | 短期 Valkey TTL + 长期 Lance 向量 | mem0 |
 
-> Embedding (fastembed) / LLM 网关 (litellm) / ASR (FunASR) 已独立为 **LakeMindModelServing (:10824)** 统一模型服务。
+> Embedding (fastembed) / LLM 网关 (litellm) / ASR (SenseVoice funasr) 已独立为 **LakeMindModelServing (:10824)** 统一模型服务。
 
 ### 4.5 引擎插件架构
 
@@ -138,7 +138,7 @@ cognitive:
 | 工具 | 定位 | 状态 |
 |------|------|------|
 | LakeMindControlCenter | 统一管理入口（前端 + BFF + Steward）：10 页面，Mission Control 仪表板，模型配置与路由 | ✅ v0.2.0 |
-| LakeMindModelServing | 统一模型服务（litellm + fastembed + FunASR） | ✅ |
+| LakeMindModelServing | 统一模型服务（litellm + fastembed + SenseVoice funasr） | ✅ |
 | LakeMindStudio | 桌面客户端（Tauri）：资产设计器、MCP 调试台 | 🔨 待开发 |
 
 > v0.1.0 的 `LakeMindSteward` + `LakeMindMonitor` 已在 v0.2.0 合并迁入 `LakeMindControlCenter`，不再独立部署。

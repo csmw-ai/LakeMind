@@ -82,3 +82,40 @@ async def add_vectors_arrow(db: str, name: str, request: Request):
             raise HTTPException(400, f"Expected vector dim=768, got {vec_field.type.list_size}")
     n = await asyncio.to_thread(_eng(request).add, db, name, data)
     return {"status": "ok", "rows_added": n}
+
+
+class CreateIndexBody(BaseModel):
+    vector_column: str = "vector"
+    index_type: str = "IVF_PQ"
+    num_partitions: int = 128
+    num_sub_vectors: int = 16
+
+
+@router.post("/{db}/{name}/indexes")
+async def create_index(db: str, name: str, body: CreateIndexBody, request: Request):
+    result = await asyncio.to_thread(
+        _eng(request).create_index, db, name,
+        body.vector_column, body.index_type, body.num_partitions, body.num_sub_vectors,
+    )
+    return result
+
+
+@router.get("/{db}/{name}/indexes")
+async def list_indexes(db: str, name: str, request: Request):
+    indexes = await asyncio.to_thread(_eng(request).list_indexes, db, name)
+    return {"db": db, "table": name, "indexes": indexes}
+
+
+@router.post("/{db}/{name}/indexes/refresh")
+async def refresh_index(db: str, name: str, body: CreateIndexBody, request: Request):
+    result = await asyncio.to_thread(
+        _eng(request).create_index, db, name,
+        body.vector_column, body.index_type, body.num_partitions, body.num_sub_vectors,
+    )
+    return result
+
+
+@router.delete("/{db}/{name}/indexes")
+async def delete_index(db: str, name: str, request: Request, index_name: str = "vector_idx"):
+    result = await asyncio.to_thread(_eng(request).drop_index, db, name, index_name)
+    return result

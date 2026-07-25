@@ -97,6 +97,24 @@ async def _cp_request(method: str, path: str, token: str, *,
         )
 
 
+async def _ms_request(method: str, path: str, *,
+                      params: dict | None = None,
+                      request_id: str | None = None, correlation_id: str | None = None) -> httpx.Response:
+    headers = {"Authorization": f"Bearer {_MODEL_SERVING_KEY}"}
+    if request_id:
+        headers["X-Request-Id"] = request_id
+    if correlation_id:
+        headers["X-Correlation-Id"] = correlation_id
+    async with httpx.AsyncClient() as client:
+        return await client.request(
+            method,
+            f"{_MODEL_SERVING}{path}",
+            params=params,
+            headers=headers,
+            timeout=30.0,
+        )
+
+
 def _get_session(request: Request) -> dict:
     session_id = request.cookies.get("session_id")
     if not session_id:
@@ -184,7 +202,8 @@ async def login(req: LoginRequest):
         "principal_id": session_data["principal_id"],
         "tenant_id": session_data["tenant_id"],
     })
-    response.set_cookie("session_id", session_id, httponly=True, secure=False,
+    response.set_cookie("session_id", session_id, httponly=True,
+                        secure=os.environ.get("COOKIE_SECURE", "0") == "1",
                         max_age=_SESSION_TTL, samesite="lax", path="/")
     return response
 
@@ -300,7 +319,7 @@ async def view_mission_control(request: Request):
         _cp_request("GET", "/api/v1/operations", token, params={"status": "APPROVAL_REQUIRED", "page_size": "100"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
         _cp_request("GET", "/api/v1/jobs", token, params={"status": "FAILED", "page_size": "100"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
         _cp_request("GET", "/api/v1/assets", token, params={"health": "DEGRADED", "page_size": "100"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
-        _cp_request("GET", "/api/v1/models/deployments", token, params={"health": "UNHEALTHY", "page_size": "100"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
+        _ms_request("GET", "/v1/models", request_id=rid, correlation_id=cid),
         _cp_request("GET", "/api/v1/observability/metrics", token, params={"name": "service.health"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
         _cp_request("GET", "/api/v1/observability/metrics", token, params={"name": "cpu.usage"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
         _cp_request("GET", "/api/v1/observability/metrics", token, params={"name": "memory.usage"}, request_id=rid, correlation_id=cid, tenant_id=ctx.get("tenant_id")),
@@ -336,10 +355,23 @@ async def view_mission_control(request: Request):
             return {"value": None, "observed_at": None, "freshness_seconds": None, "stale": True, "partial": True, "total": 0}
         if isinstance(data, dict) and "items" in data:
             items = data["items"] if isinstance(data["items"], list) else []
-            return {"value": len(items), "observed_at": now_iso, "freshness_seconds": 0, "stale": False, "partial": False, "total": data.get("total", len(items))}
+            t = data.get("total", len(items))
+            return {"value": t, "observed_at": now_iso, "freshness_seconds": 0, "stale": False, "partial": False, "total": t}
         if isinstance(data, list):
             return {"value": len(data), "observed_at": now_iso, "freshness_seconds": 0, "stale": False, "partial": False, "total": len(data)}
         return {"value": data, "observed_at": now_iso, "freshness_seconds": 0, "stale": False, "partial": False}
+
+    def _unhealthy_models_card(idx):
+        data = _safe(idx)
+        if data is None:
+            return {"value": None, "observed_at": None, "freshness_seconds": None, "stale": True, "partial": True, "total": 0}
+        models = []
+        if isinstance(data, dict) and "data" in data:
+            models = data["data"] if isinstance(data["data"], list) else []
+        elif isinstance(data, list):
+            models = data
+        unhealthy = [m for m in models if isinstance(m, dict) and m.get("health_status") == "unhealthy"]
+        return {"value": len(unhealthy), "observed_at": now_iso, "freshness_seconds": 0, "stale": False, "partial": False, "total": len(models)}
 
     def _items_card(idx):
         data = _safe(idx)
@@ -373,7 +405,7 @@ async def view_mission_control(request: Request):
         "pending_approvals": _count_card(0),
         "failed_jobs": _count_card(1),
         "degraded_assets": _count_card(2),
-        "unhealthy_deployments": _count_card(3),
+        "unhealthy_deployments": _unhealthy_models_card(3),
         "service_health": _metric_card(4),
         "cpu_usage": _metric_card(5),
         "memory_usage": _metric_card(6),
@@ -445,6 +477,78 @@ async def view_job_detail(job_id: str, request: Request):
         "job": _safe(0),
         "attempts": _safe(1),
         "events": _safe(2),
+    })
+
+
+@app.get("/view/jobs-dashboard")
+async def view_jobs_dashboard(request: Request):
+    session = _get_session(request)
+    ctx = _ctx_from_session(session, request)
+    import asyncio
+    token = ctx["token"]
+    rid = ctx["request_id"]
+    cid = ctx["correlation_id"]
+    tid = ctx.get("tenant_id")
+
+    results = await asyncio.gather(
+        _cp_request("GET", "/api/v1/jobs", token, params={"status": "SUCCEEDED", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        _cp_request("GET", "/api/v1/jobs", token, params={"status": "FAILED", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        _cp_request("GET", "/api/v1/jobs", token, params={"status": "RUNNING", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        _cp_request("GET", "/api/v1/jobs", token, params={"status": "PENDING", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        _cp_request("GET", "/api/v1/jobs", token, params={"page_size": "200"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        return_exceptions=True,
+    )
+
+    def _safe(idx):
+        r = results[idx]
+        if isinstance(r, Exception) or r.status_code != 200:
+            return None
+        try:
+            return r.json()
+        except Exception:
+            return None
+
+    def _total(idx):
+        data = _safe(idx)
+        if data is None:
+            return None
+        if isinstance(data, dict):
+            return data.get("total", len(data.get("items", [])))
+        if isinstance(data, list):
+            return len(data)
+        return None
+
+    recent = _safe(4)
+    recent_items: list = []
+    recent_total = 0
+    if recent and isinstance(recent, dict):
+        recent_items = recent.get("items", []) if isinstance(recent.get("items"), list) else []
+        recent_total = recent.get("total", len(recent_items))
+    elif recent and isinstance(recent, list):
+        recent_items = recent
+        recent_total = len(recent)
+
+    partial_failures: list[str] = []
+    for idx, name in enumerate(["succeeded", "failed", "running", "pending", "recent"]):
+        if _safe(idx) is None:
+            partial_failures.append(name)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    return JSONResponse({
+        "_meta": {
+            "request_id": rid,
+            "correlation_id": cid,
+            "partial": len(partial_failures) > 0,
+            "partial_failure": partial_failures,
+            "observed_at": now_iso,
+        },
+        "total": recent_total,
+        "succeeded": _total(0),
+        "failed": _total(1),
+        "running": _total(2),
+        "pending": _total(3),
+        "recent_jobs": recent_items,
     })
 
 

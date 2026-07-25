@@ -195,7 +195,7 @@ v0.1.0 有两个独立 Plugin：
 v0.2.0 合并为 `ModelProvider`，由 LakeMindModelServing 统一实现：
 - `chat()` — LLM 对话（litellm 路由）
 - `embed()` — 嵌入（fastembed）
-- `asr()` — 语音识别（FunASR SenseVoice-Small）
+- `asr()` — 语音识别（faster-whisper, faster-whisper-small）
 - `list_models()` — 模型列表
 - `health()` — 健康检查
 

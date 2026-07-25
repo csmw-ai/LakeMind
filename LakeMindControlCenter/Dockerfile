@@ -4,7 +4,7 @@ ARG PYTHON_IMAGE=python:3.12-slim
 
 FROM ${NODE_IMAGE} AS frontend-build
 WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 COPY frontend/ ./
@@ -13,7 +13,7 @@ RUN npm run build
 FROM ${PYTHON_IMAGE} AS py-builder
 WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:0.11.28 /uv /uvx /bin/
-ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PYTHONDONTWRITEBYTECODE=1
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PYTHONDONTWRITEBYTECODE=1 UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 COPY control/pyproject.toml control/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project

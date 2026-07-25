@@ -1,6 +1,6 @@
 # STATE.md — LakeMind 项目开发进展状态
 
-> 最后更新：2026-07-21
+> 最后更新：2026-07-24（v0.2.1-ray-fix）
 > 总文件：`AGENTS.md`，设计规范：`.agent/DESIGN.md`，开发规范：`.agent/SPEC.md`
 
 ---
@@ -9,7 +9,7 @@
 
 ```
 数据平面  ████████████████████  100%  (REST API + 10 引擎 + Ray)
-模型平面  ████████████████████  100%  (litellm + fastembed + FunASR)
+模型平面  ████████████████████  100%  (litellm + fastembed + SenseVoice funasr)
 运行平面  ████████████████████  100%  (3 MCP + ControlCenter 全完成)
 开发平面  ░░░░░░░░░░░░░░░░░░░░    0%  (Studio 未开始)
 示例      ████████████████████  100%  (meeting-agent v0.2.0 全链路 + lakemind-connector)
@@ -29,8 +29,8 @@
 | LLM 网关 | GatewayLLM 路由器 → litellm Router | ✅ 完成 |
 | MCP 重设计 | mem0 记忆 + OKF 知识 + execute_skill 移除 + 三要素 | ✅ 完成 |
 | 许可证审计 | Dragonfly BSL 1.1 → Valkey BSD 3-Clause | ✅ 完成 |
-| LakeMindModelServing | 统一模型服务：litellm + fastembed + FunASR | ✅ 完成 |
-| **v0.1.0 发版** | MVP：13 容器、10 引擎、58 MCP 工具 | ✅ 完成 |
+| LakeMindModelServing | 统一模型服务：litellm + fastembed + SenseVoice funasr | ✅ 完成 |
+| **v0.1.0 发版** | MVP：13 容器、10 引擎、68 MCP 工具 | ✅ 完成 |
 | **v0.2.0 ControlCenter** | 统一管理入口（前端 + BFF + Steward），10 页面 | ✅ 完成 |
 | **v0.2.0 RBAC** | 5 builtin roles, 26 actions, SecurityContext | ✅ 完成 |
 | **v0.2.0 Job Runtime** | JobService 受控执行，状态机，Ray backend | ✅ 完成 |
@@ -38,6 +38,11 @@
 | **v0.2.0 Meeting Agent** | 浏览器录音→ASR→转写→纪要→知识全链路 | ✅ 完成 |
 | **Steward+Monitor 迁移** | 合并迁入 ControlCenter，删除独立目录 | ✅ 完成 |
 | **v0.2.0 性能优化** | 4 轮压测 3→7 PASS，事件循环修复+IVF索引+锁细化+Arrow IPC | ✅ 完成 |
+| **v0.2.0 代码修正** | 7 项问题修正：文档同步+鉴权降级+密钥加密+CI测试+Cookie安全 | ✅ 完成 |
+| **v0.2.0 最终加固** | WP0-WP7 全加固：生命周期+事件+异步边界+向量API+Memory优化+E2E测试 | ✅ 完成 |
+| **v0.2.0 Ray 修复** | 7 bug 修复：check_timeouts cancel + _mark_lost cancel + entrypoint_num_cpus + UNKNOWN 状态 + cleanup_zombies + working_dir + scan_jobs | ✅ 完成 |
+| **v0.2.2 ASR 改进** | ONNX 自定义后端废弁 → funasr 官方库（自带标点 + ITN，PyTorch CPU 推理 ~2s） | ✅ 完成 |
+| **v0.2.1 Jobs API 修复** | 3 bug：duplicate app=FastAPI() 丢 lifespan + get_skill("latest") 未解析 + S3 URI 未解析 | ✅ 完成 |
 | LakeMindStudio | Tauri 桌面客户端 | ❌ 未开始 |
 
 ---
@@ -49,7 +54,7 @@
 | 容器 | 端口 | 状态 | 用途 |
 |------|------|------|------|
 | lakemind-server-api | 10823 | ✅ Up | REST API + 10 引擎 |
-| lakemind-model-serving | 10824 | ✅ Up | 统一模型服务（litellm + fastembed + FunASR） |
+| lakemind-model-serving | 10824 | ✅ Up | 统一模型服务（litellm + fastembed + SenseVoice funasr） |
 | lakemind-postgres | 5432 | ✅ Up | Metadata Hub |
 | lakemind-seaweedfs | 8333 | ✅ Up | S3 对象存储 |
 | lakemind-valkey | 6379 | ✅ Up | TTL KV 缓存（BSD 3-Clause） |
@@ -118,6 +123,8 @@ memory:          True
 | 验证 | 脚本 | 结果 | 说明 |
 |------|------|------|------|
 | **全面测试 L0-L8** | `scripts/verify_full.py` | **286/286 PASS** | 全分层验证（L9 性能压测跳过） |
+| **pytest 单元测试** | `pytest tests/unit/` | **63/63 PASS** | 状态机+加密+安全+隔离+Action枚举 |
+| **pytest E2E 测试** | `pytest tests/e2e/` | **33 skipped** | 服务器未运行时优雅跳过 |
 | Meeting Agent E2E | `examples/meeting-agent/` | ✅ PASS | 133 chunks → 31 ASR → 30 转写 → 6 版纪要 → 7 条知识 |
 | ControlCenter | `docs/control-center.md` | ✅ PASS | Jobs 5853 条, Models 5 def+8 dep+5 profile, Instances 8 个全 healthy |
 | **性能压测 v4** | `scripts/stress_test.py` | **7/9 PASS** | 向量检索 23x, Memory Add 335x, 并发 0% error |
@@ -206,7 +213,8 @@ memory:          True
 - ✅ FastAPI 服务（:10824）
 - ✅ litellm Router（多 provider 路由 + fallback，timeout=120s, num_retries=3）
 - ✅ fastembed 本地嵌入（jina-embeddings-v2-base-zh, dim=768）
-- ✅ FunASR 本地 ASR（SenseVoice-Small，CPU）
+- ✅ SenseVoice 本地 ASR（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN）
+- ✅ ONNX 自定义后端已废弁（由 funasr 官方库替代，标点 + ITN 由模型内建产出）
 - ✅ OpenAI 兼容 API
 
 ### 5.7 LakeMindStudio — 0%
@@ -228,6 +236,24 @@ memory:          True
 | 5 | Arrow 端点未接入 Knowledge outbox worker | 真实向量写入仍走 JSON | P1 | 待接入 |
 | 6 | v4 改动通过 docker cp 部署，未进正式镜像 | 需 DNS 恢复后重建 | P1 | 待重建 |
 | 7 | uvicorn workers>1 在 Docker Desktop 下异常 | IPv6 端口转发问题 | P3 | workers=1 可用 |
+| 8 | 3 MCP config.py 95% 重复 | 复制粘贴，各自演化 | P2 | 后续提取 LakeMindMCPShared 包 |
+
+### v0.2.0-hardening 已修复问题
+
+| 原问题 | 修复 |
+|--------|------|
+| Job Runtime 未连接到 app 生命周期 | lifespan 初始化 RayExecutionBackend → JobService → JobSyncService |
+| list_jobs 查询不存在的 jobs 表 | 改为查询 job_runs，SQL 级租户过滤 + 分页 |
+| job_events 未写入 | _write_event 在所有状态转换时写入 |
+| Outbox 无默认处理器 | 注册 asset.*/knowledge.*/job.*/model.*/config.*/operation.* |
+| 17 个 API 文件同步 I/O 阻塞事件循环 | 全部包装 asyncio.to_thread |
+| Memory 全表扫描去重 | PG memory_hash_index 表 + UNIQUE 约束 |
+| Memory 每次新建 HTTP 连接 | 持久化 httpx.Client |
+| Steward WebSocket 不稳定 | 替换为 fetch POST /steward/chat |
+| 监控服务健康探测为 unknown | 真实 HTTP GET /health 探测 |
+| ModelServing stream=true 静默忽略 | 返回 400 STREAMING_NOT_SUPPORTED_IN_V0_2_0 |
+| 33 个 E2E 测试为空 pass | 替换为真实 HTTP 测试 + skip_if_no_server |
+| Memory 零向量回退掩盖错误 | 移除回退，_embed 抛异常 |
 
 ---
 

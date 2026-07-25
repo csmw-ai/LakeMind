@@ -97,13 +97,13 @@ LakeMindServer 是数据平面的核心，提供 REST API 网关（40+ OpenAPI �
 |------|------|------|
 | Embedding | **fastembed** | ONNX + jinaai/jina-embeddings-v2-base-zh，dim=768，中英混合 |
 | LLM 网关 | **litellm** | 多 provider 路由 + fallback，支持 OpenAI/DeepSeek/Anthropic/Ollama |
-| 语音识别 | **FunASR** | SenseVoice-Small 本地 ASR |
+| 语音识别 | **SenseVoice (funasr)** | iic/SenseVoiceSmall 本地 ASR (CPU, funasr + PyTorch，自带标点 + ITN) |
 
 ### 配套工具
 
 | 工具 | 定位 | 状态 |
 |------|------|------|
-| **LakeMindModelServing** | 统一模型服务：litellm 网关 + fastembed 嵌入 + FunASR 语音识别 | ✅ 已完成 |
+| **LakeMindModelServing** | 统一模型服务：litellm 网关 + fastembed 嵌入 + SenseVoice funasr 语音识别 | ✅ 已完成 |
 | **LakeMindControlCenter** | 统一管理入口（前端 + BFF + Steward）：10 页面，Mission Control 仪表板，模型配置与路由，Steward 对话 | ✅ v0.2.0 |
 | **LakeMindStudio** | 桌面客户端（Tauri）：资产设计器、MCP 调试台、Skill 脚手架、CI/CD | 🔨 待开发 |
 
@@ -167,7 +167,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml --env-file .env
 | 容器 | 端口 | 用途 |
 |------|------|------|
 | lakemind-server-api | 10823 | REST API 网关 (40+ 路径) |
-| lakemind-model-serving | 10824 | 统一模型服务 (litellm + fastembed + FunASR) |
+| lakemind-model-serving | 10824 | 统一模型服务 (litellm + fastembed + SenseVoice funasr) |
 | lakemind-postgres | 5432 | 统一元数据 + 图存储 |
 | lakemind-seaweedfs | 8333 | S3 对象存储 |
 | lakemind-valkey | 6379 | TTL KV 缓存 |
@@ -244,7 +244,7 @@ compute:
 | 分布式计算 | Ray | Apache 2.0 |
 | Embedding | fastembed | Apache 2.0 |
 | LLM 网关 | litellm | MIT |
-| 语音识别 | FunASR | MIT |
+| 语音识别 | SenseVoice (funasr) | Apache-2.0 |
 | MCP SDK | FastMCP | MIT |
 | Agent 框架 | LangGraph | MIT |
 
@@ -271,7 +271,7 @@ compute:
 |------|------|--------|
 | [开发指南](docs/develop-guide.md) | 编写 Skill、管理密钥、提交 Ray 作业、构建数据处理流水线 | 业务开发者 |
 | [架构设计](docs/architecture.md) | 三平面分层、MCP 职责、数据流、设计决策 | 架构师 |
-| [MCP 工具参考](docs/mcp-tools.md) | 58 个工具 + 23 个资源 + 10 个 prompts 完整清单 | Agent 开发者 |
+| [MCP 工具参考](docs/mcp-tools.md) | 68 个工具 + 23 个资源 + 10 个 prompts 完整清单 | Agent 开发者 |
 | [REST API 参考](docs/api-reference.md) | 40+ OpenAPI 路径，11 个功能域 | 后端开发者 |
 | [Example 开发指南](docs/lakemind-example-develop-guide.md) | 从零构建 Example Agent：MCP 客户端、Skill、Job、Profile、打包发布、Docker 部署全流程 | Agent 开发者 |
 
@@ -304,6 +304,6 @@ compute:
 
 | 版本 | 计划内容 | 状态 |
 |------|----------|------|
-| **v0.1.0** | MVP：13 容器、10 引擎、58 MCP 工具、Ray 分布式计算 | ✅ 已发布 |
+| **v0.1.0** | MVP：13 容器、10 引擎、68 MCP 工具、Ray 分布式计算 | ✅ 已发布 |
 | **v0.2.0** | ControlCenter 统一管理（10 页面）、RBAC、Job Runtime、模型管理、Meeting Agent 全链路 | ✅ 已发布 |
 | **v0.3** | LakeMindStudio（Tauri 桌面客户端） | 规划中 |

@@ -16,7 +16,7 @@ class InstanceRegistry:
         instance_id = _ulid("ins")
         execute(
             "INSERT INTO instance_registry (instance_id, service_type, version, endpoint, capabilities, health_status) "
-            "VALUES (%s, %s, %s, %s, %s, 'healthy')",
+            "VALUES (%s, %s, %s, %s, %s, 'unknown')",
             (instance_id, service_type, version, endpoint, capabilities or []),
         )
         return {"instance_id": instance_id, "service_type": service_type, "endpoint": endpoint}

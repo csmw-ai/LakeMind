@@ -24,6 +24,16 @@ _KNOWN_SERVICES = [
 _INSTANCE_IDS: dict[str, str] = {}
 
 
+def _probe_health(endpoint: str, timeout: float = 3.0) -> str:
+    import httpx
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(f"{endpoint}/health")
+            return "healthy" if resp.status_code < 500 else "unhealthy"
+    except Exception:
+        return "unhealthy"
+
+
 def register_all_services() -> None:
     for svc in _KNOWN_SERVICES:
         try:
@@ -33,7 +43,6 @@ def register_all_services() -> None:
             )
             if existing:
                 _INSTANCE_IDS[svc["service_type"]] = existing["instance_id"]
-                InstanceRegistry.heartbeat(existing["instance_id"], "healthy")
             else:
                 result = InstanceRegistry.register(
                     service_type=svc["service_type"],
@@ -64,7 +73,7 @@ def collect_metrics() -> None:
     except Exception:
         pass
     try:
-        row = execute_one("SELECT COUNT(*) AS cnt FROM ray_jobs WHERE status = 'running'")
+        row = execute_one("SELECT COUNT(*) AS cnt FROM job_runs WHERE status IN ('QUEUED','RUNNING')")
         queue_depth = row["cnt"] if row else 0
         MetricsService.write("job.queue_depth", float(queue_depth), scope_type="PLATFORM", observed_at=now)
     except Exception:
@@ -81,9 +90,13 @@ def collect_metrics() -> None:
         MetricsService.write("service.health", health_pct, scope_type="PLATFORM", observed_at=now)
     except Exception:
         pass
-    for svc_type, inst_id in _INSTANCE_IDS.items():
+    for svc in _KNOWN_SERVICES:
+        inst_id = _INSTANCE_IDS.get(svc["service_type"])
+        if not inst_id:
+            continue
+        status = _probe_health(svc["endpoint"])
         try:
-            InstanceRegistry.heartbeat(inst_id, "healthy")
+            InstanceRegistry.heartbeat(inst_id, status)
         except Exception:
             pass
 

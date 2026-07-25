@@ -43,6 +43,7 @@ class BasicMemory:
         self._history_ready = False
         self._lock = threading.Lock()
         self._lance_conns: dict = {}
+        self._http_client = httpx.Client(timeout=30.0)
 
     def set_llm(self, llm):
         self._llm = llm
@@ -53,18 +54,14 @@ class BasicMemory:
             self._redis = redis.Redis(host=self._kv_host, port=self._kv_port, decode_responses=True)
 
     def _embed(self, text: str) -> list[float]:
-        try:
-            resp = httpx.post(
-                f"{self._model_serving_url}/v1/embeddings",
-                json={"model": "jina-embeddings-v2-base-zh", "input": [text]},
-                headers={"Authorization": f"Bearer {self._model_serving_api_key}"},
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["data"][0]["embedding"]
-        except Exception:
-            return [0.0] * self._embed_dim
+        resp = self._http_client.post(
+            f"{self._model_serving_url}/v1/embeddings",
+            json={"model": "jina-embeddings-v2-base-zh", "input": [text]},
+            headers={"Authorization": f"Bearer {self._model_serving_api_key}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["data"][0]["embedding"]
 
     def _ensure_history(self):
         if not self._history_ready:
@@ -132,11 +129,10 @@ class BasicMemory:
                 )
                 content = resp.get("content", "")
             else:
-                r = httpx.post(
+                r = self._http_client.post(
                     f"{self._model_serving_url}/v1/chat/completions",
                     json={"model": self._llm_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 512},
                     headers={"Authorization": f"Bearer {self._model_serving_api_key}"},
-                    timeout=30.0,
                 )
                 r.raise_for_status()
                 result = r.json()
@@ -169,13 +165,20 @@ class BasicMemory:
 
         existing_hashes = set()
         with self._lock:
-            conn, tbl_name = self._connect_lance(tenant_id, agent_id)
-            if tbl_name in conn.table_names():
-                try:
-                    existing = conn.open_table(tbl_name).to_arrow().to_pylist()
-                    existing_hashes = {r.get("hash") for r in existing if r.get("hash")}
-                except Exception:
-                    pass
+            try:
+                with psycopg2.connect(self._dsn) as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "CREATE TABLE IF NOT EXISTS memory_hash_index ("
+                        "tenant_id TEXT, agent_id TEXT, content_hash TEXT, memory_id TEXT, "
+                        "UNIQUE(tenant_id, agent_id, content_hash))"
+                    )
+                    cur.execute(
+                        "SELECT content_hash FROM memory_hash_index WHERE tenant_id = %s AND agent_id = %s",
+                        (tenant_id, agent_id),
+                    )
+                    existing_hashes = {r[0] for r in cur.fetchall()}
+            except Exception:
+                pass
 
         results = []
         rows = []
@@ -210,6 +213,16 @@ class BasicMemory:
                     conn.open_table(tbl_name).add(table_data)
                 else:
                     conn.create_table(tbl_name, data=table_data)
+            try:
+                with psycopg2.connect(self._dsn) as conn, conn.cursor() as cur:
+                    for r in rows:
+                        cur.execute(
+                            "INSERT INTO memory_hash_index (tenant_id, agent_id, content_hash, memory_id) "
+                            "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                            (tenant_id, agent_id, r["hash"], r["memory_id"]),
+                        )
+            except Exception:
+                pass
 
         return {"results": results}
 
@@ -389,22 +402,28 @@ class BasicMemory:
                 if tbl_name not in conn.table_names():
                     return {"status": "ok", "deleted": 0}
                 tbl = conn.open_table(tbl_name)
-                all_rows = tbl.to_arrow().to_pylist()
-                for r in all_rows:
-                    if run_id and r.get("run_id", "") != run_id:
-                        continue
-                    if filters:
-                        try:
-                            meta = json.loads(r.get("metadata", "{}"))
-                        except Exception:
-                            meta = {}
-                        if not all(meta.get(k) == v for k, v in filters.items()):
+                if run_id and not filters:
+                    before = tbl.count_rows()
+                    tbl.delete(f"run_id = '{run_id}'")
+                    deleted = before - tbl.count_rows()
+                else:
+                    all_rows = tbl.to_arrow().to_pylist()
+                    to_delete = []
+                    for r in all_rows:
+                        if run_id and r.get("run_id", "") != run_id:
                             continue
-                    to_delete.append(r)
-                for r in to_delete:
-                    mid = r.get("memory_id")
-                    tbl.delete(f"memory_id = '{mid}'")
-                    deleted += 1
+                        if filters:
+                            try:
+                                meta = json.loads(r.get("metadata", "{}"))
+                            except Exception:
+                                meta = {}
+                            if not all(meta.get(k) == v for k, v in filters.items()):
+                                continue
+                        to_delete.append(r)
+                    for r in to_delete:
+                        mid = r.get("memory_id")
+                        tbl.delete(f"memory_id = '{mid}'")
+                        deleted += 1
             except Exception:
                 pass
 

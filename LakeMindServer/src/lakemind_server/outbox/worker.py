@@ -42,8 +42,13 @@ def process_batch(batch_size: int = 10) -> int:
         )
         handler = _handlers.get(row["event_type"])
         if handler is None:
+            for prefix, h in _handlers.items():
+                if row["event_type"].startswith(prefix):
+                    handler = h
+                    break
+        if handler is None:
             execute(
-                "UPDATE outbox SET status = 'DONE', processed_at = %s WHERE event_id = %s",
+                "UPDATE outbox SET status = 'FAILED', retry_count = retry_count, processed_at = %s WHERE event_id = %s",
                 (datetime.now(timezone.utc), row["event_id"]),
             )
             count += 1
@@ -73,5 +78,79 @@ def process_batch(batch_size: int = 10) -> int:
 
 
 def get_pending_count() -> int:
-    row = execute_one("SELECT COUNT(*) as total FROM outbox WHERE status = 'PENDING'")
+    row = execute_one("SELECT count(*) as total FROM outbox WHERE status = 'PENDING'")
     return row["total"] if row else 0
+
+
+def register_default_handlers() -> None:
+    from ..services.event_service import EventService
+
+    def _emit_asset(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "asset.changed"),
+            scope_type="TENANT",
+            scope_id=payload.get("tenant_id"),
+            resource_type="asset",
+            resource_id=payload.get("asset_id"),
+            payload=payload,
+        )
+
+    def _emit_knowledge(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "knowledge.changed"),
+            scope_type="TENANT",
+            scope_id=payload.get("tenant_id"),
+            resource_type="knowledge",
+            resource_id=payload.get("knowledge_id"),
+            payload=payload,
+        )
+
+    def _emit_job(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "job.status_changed"),
+            scope_type="TENANT",
+            scope_id=payload.get("tenant_id"),
+            resource_type="job",
+            resource_id=payload.get("job_id"),
+            payload=payload,
+        )
+
+    def _emit_model(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "model.deployment_changed"),
+            scope_type="PLATFORM",
+            scope_id=None,
+            resource_type="model",
+            resource_id=payload.get("model_id"),
+            payload=payload,
+        )
+
+    def _emit_config(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "config.activated"),
+            scope_type="PLATFORM",
+            scope_id=None,
+            resource_type="config",
+            resource_id=payload.get("revision_id"),
+            payload=payload,
+        )
+
+    def _emit_operation(payload):
+        EventService.emit(
+            event_type=payload.get("event_type", "operation.status_changed"),
+            scope_type="TENANT",
+            scope_id=payload.get("tenant_id"),
+            resource_type="operation",
+            resource_id=payload.get("operation_id"),
+            payload=payload,
+        )
+
+    for prefix, handler in (
+        ("asset.", _emit_asset),
+        ("knowledge.", _emit_knowledge),
+        ("job.", _emit_job),
+        ("model.", _emit_model),
+        ("config.", _emit_config),
+        ("operation.", _emit_operation),
+    ):
+        register_handler(prefix, handler)

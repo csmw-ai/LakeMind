@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Request
 from ..security.middleware import get_security_context
 from ..services.operation_service import OperationService
@@ -10,7 +11,8 @@ router = APIRouter()
 async def create_operation(request: Request):
     ctx = get_security_context(request)
     body = await request.json()
-    return OperationService.create(
+    return await asyncio.to_thread(
+        OperationService.create,
         op_type=body["op_type"],
         target_resource=body["target_resource"],
         initiator_id=ctx.principal_id,
@@ -24,7 +26,8 @@ async def create_operation(request: Request):
 async def list_operations(request: Request):
     ctx = get_security_context(request)
     params = request.query_params
-    return OperationService.list(
+    return await asyncio.to_thread(
+        OperationService.list,
         status=params.get("status"),
         op_type=params.get("op_type"),
         page=int(params.get("page", "1")),
@@ -33,23 +36,23 @@ async def list_operations(request: Request):
 
 @router.get("/{op_id}")
 async def get_operation(op_id: str):
-    return OperationService.get(op_id)
+    return await asyncio.to_thread(OperationService.get, op_id)
 
 
 @router.post("/{op_id}/approve")
 async def approve_operation(op_id: str, request: Request):
     ctx = get_security_context(request)
-    return OperationService.approve(op_id, ctx.principal_id)
+    return await asyncio.to_thread(OperationService.approve, op_id, ctx.principal_id)
 
 
 @router.post("/{op_id}/reject")
 async def reject_operation(op_id: str, request: Request):
     ctx = get_security_context(request)
     body = await request.json()
-    return OperationService.reject(op_id, ctx.principal_id, body.get("reason", ""))
+    return await asyncio.to_thread(OperationService.reject, op_id, ctx.principal_id, body.get("reason", ""))
 
 
 @router.post("/{op_id}/cancel")
 async def cancel_operation(op_id: str, request: Request):
     ctx = get_security_context(request)
-    return OperationService.cancel(op_id)
+    return await asyncio.to_thread(OperationService.cancel, op_id)

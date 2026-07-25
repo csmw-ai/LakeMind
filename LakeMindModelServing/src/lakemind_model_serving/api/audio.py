@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import logging
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
@@ -9,8 +8,6 @@ from ..auth import check_auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-_asr_concurrency = int(os.environ.get("ASR_CONCURRENCY", "1"))
-_asr_semaphore = asyncio.Semaphore(_asr_concurrency)
 _asr_max_upload_mb = int(os.environ.get("ASR_MAX_UPLOAD_MB", "100"))
 _allowed_extensions = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}
 
@@ -55,16 +52,21 @@ async def transcribe(
     if ext and ext not in _allowed_extensions:
         raise HTTPException(status_code=400, detail=f"Unsupported file extension: {ext}")
 
-    async with _asr_semaphore:
-        try:
-            text = await asyncio.to_thread(
-                asr_mgr.transcribe_bytes,
-                audio_bytes,
-                target_model,
-                filename=filename,
-                language=language,
-            )
-            return {"text": text, "model": target_model}
-        except Exception as e:
-            logger.error("ASR failed: %s", e)
-            raise HTTPException(status_code=502, detail=f"ASR transcription failed: {e}")
+    try:
+        result = await asr_mgr.async_transcribe(
+            audio_bytes,
+            target_model,
+            filename=filename,
+            language=language,
+        )
+        return {
+            "text": result.text,
+            "model": result.model,
+            "provider": result.provider,
+            "language": result.language,
+            "processing_ms": result.processing_ms,
+            "duration_ms": result.duration_ms,
+        }
+    except Exception as e:
+        logger.error("ASR failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"ASR transcription failed: {e}")

@@ -16,7 +16,7 @@ LakeMind/
 │   ├── SPEC.md                  # 开发规范（本文件）
 │   └── STATE.md                 # 项目开发进展状态
 ├── LakeMindServer/              # 数据平面（REST API + 10 引擎）
-├── LakeMindModelServing/         # 模型平面 - 统一模型服务（litellm + fastembed + FunASR）
+├── LakeMindModelServing/         # 模型平面 - 统一模型服务（litellm + fastembed + SenseVoice funasr）
 ├── LakeMindMCP/                 # 运行平面 - 3 MCP 编排（docker-compose + --profile all）
 │   ├── LakeMindAssetMCP/        #   资产面 MCP（23 tools, 11 resources, 6 prompts）
 │   ├── LakeMindDataMCP/         #   数据面 MCP（18 tools, 6 resources, 2 prompts）
@@ -237,7 +237,7 @@ docker restart lakemind-server-api
 
 | 验证 | 脚本 | 范围 | 当前结果 |
 |------|------|------|---------|
-| **全面测试 L0-L9** | `scripts/verify_full.py` | 58 tools + 10 prompts + 23 resources + REST API + 安全 + 端到端 + 性能 | **297/297 PASS** |
+| **全面测试 L0-L9** | `scripts/verify_full.py` | 68 tools + 10 prompts + 23 resources + REST API + 安全 + 端到端 + 性能 | **297/297 PASS** |
 
 ### 5.3 验证流程
 
@@ -263,7 +263,7 @@ docker restart lakemind-server-api
 | 分布式计算 | Ray 2.41.0 | `ray[default]` |
 | Embedding | fastembed | `fastembed` |
 | LLM 网关 | litellm | `litellm` |
-| ASR | faster-whisper | `faster-whisper` |
+| ASR | SenseVoice (funasr) | `funasr` + `torch` CPU + `librosa` |
 | MCP SDK | FastMCP | `mcp` |
 | Agent 框架 | LangGraph | `langgraph` |
 | Web 框架 | FastAPI（Steward）/ Express（Monitor） | — |
@@ -289,7 +289,7 @@ docker restart lakemind-server-api
 | **持久化 volume** | 模型存储在 Docker named volume 中，容器重建后不丢失。 |
 | **启动时预加载** | ModelServing 启动时预加载模型（`preload: true`），不在首个请求时触发加载。 |
 | **readiness 检查** | `/health/ready` 反映模型是否实际加载完成，`/health` 仅检查进程存活。 |
-| **local_only 模式** | FunASR `AutoModel` 传入本地绝对路径，不传入 ModelScope model ID，运行时不访问外部模型仓库。 |
+| **local_only 模式** | SenseVoice funasr 从本地路径加载模型文件，运行时不访问外部模型仓库。 |
 
 ---
 

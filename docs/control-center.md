@@ -273,7 +273,7 @@ curl -X POST http://localhost:10824/v1/chat/completions \
 | `deepseek-v4-flash` | chat | openai | 默认 LLM（ModelArts MaaS） |
 | `jinaai/jina-embeddings-v2-base-zh` | embedding | fastembed | 默认嵌入（768 维） |
 | `jina-embeddings-v2-base-zh` | embedding | fastembed | 嵌入备选 |
-| `iic/SenseVoiceSmall` | asr | funasr | 语音识别（FunASR） |
+| `Systran/faster-whisper-small` | asr | faster-whisper | 语音识别（faster-whisper） |
 | `whisper-large-v3-turbo` | asr | faster-whisper | 语音识别（faster-whisper） |
 
 ### 4.6 接入本地模型（Ollama 示例）
