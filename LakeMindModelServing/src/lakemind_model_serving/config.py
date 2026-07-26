@@ -85,6 +85,8 @@ class RegistryConfig:
 class ModelsConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
+    providers: list = field(default_factory=list)
+    models: list = field(default_factory=list)
     llm_providers: list = field(default_factory=list)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     asr: ASRConfig = field(default_factory=ASRConfig)
@@ -127,6 +129,8 @@ def load_config(path: str | None = None) -> ModelsConfig:
     )
 
     llm_providers = raw.get("llm_providers", [])
+    providers = raw.get("providers", [])
+    models_cfg = raw.get("models", [])
 
     emb_raw = raw.get("embedding", {})
     bi_raw = emb_raw.get("built_in", {})
@@ -187,6 +191,8 @@ def load_config(path: str | None = None) -> ModelsConfig:
     return ModelsConfig(
         server=server,
         gateway=gateway,
+        providers=providers,
+        models=models_cfg,
         llm_providers=llm_providers,
         embedding=embedding,
         asr=asr,

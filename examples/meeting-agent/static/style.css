@@ -1,0 +1,80 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
+#app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 2px solid #4a90d9; margin-bottom: 20px; }
+header h1 { color: #4a90d9; }
+.header-actions { display: flex; gap: 8px; }
+.header-btn { padding: 8px 16px; background: #4a90d9; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.header-btn-secondary { background: #95a5a6; }
+
+/* ── Task Gallery ─────────────────────────────────────────── */
+.gallery-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.gallery-header h2 { color: #333; }
+.primary-btn { padding: 10px 20px; background: #4a90d9; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
+.primary-btn:hover { background: #357abd; }
+
+.task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.task-card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: box-shadow 0.2s; }
+.task-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.task-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.task-card-title { font-weight: bold; font-size: 16px; color: #2c3e50; }
+.task-card-meta { display: flex; gap: 12px; font-size: 13px; color: #888; margin-bottom: 8px; }
+.task-card-participants { font-size: 13px; color: #aaa; margin-bottom: 12px; }
+.task-card-btn { width: 100%; padding: 6px; background: #ecf0f1; color: #4a90d9; border: 1px solid #dce; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.task-card-btn:hover { background: #4a90d9; color: white; }
+
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+.badge-recording { background: #e74c3c; color: white; }
+.badge-stopped, .badge-completed { background: #27ae60; color: white; }
+
+.loading-hint, .empty-hint { color: #999; text-align: center; padding: 40px; font-size: 15px; }
+
+/* ── Recording View ───────────────────────────────────────── */
+.meeting-config { display: flex; gap: 20px; margin-bottom: 15px; }
+.meeting-config label { display: flex; align-items: center; gap: 5px; }
+.meeting-config input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 200px; }
+
+.recording-area { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+.record-btn { width: 60px; height: 60px; border-radius: 50%; background: #e74c3c; color: white; border: none; font-size: 14px; cursor: pointer; transition: background 0.3s; }
+.record-btn.recording { background: #c0392b; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+#status-text { font-weight: bold; }
+#timer { font-family: monospace; font-size: 18px; }
+#chunk-count { color: #888; }
+
+/* ── Panels (shared by recording & detail) ────────────────── */
+.panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+.panel { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.panel h3 { color: #4a90d9; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+.panel-content { max-height: 400px; overflow-y: auto; line-height: 1.6; font-size: 14px; }
+.panel-content .entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #eee; }
+.panel-content .entry:last-child { border-bottom: none; }
+
+#transcript .entry { color: #555; }
+#minutes { white-space: pre-wrap; }
+#knowledge .entry { color: #2c3e50; }
+#knowledge .entry .title { font-weight: bold; color: #4a90d9; }
+
+/* ── Task Detail View ─────────────────────────────────────── */
+.detail-header { margin-bottom: 20px; }
+.detail-header h2 { display: inline; margin-left: 12px; color: #2c3e50; }
+.detail-meta { display: flex; gap: 16px; margin-top: 8px; font-size: 14px; color: #888; align-items: center; }
+#detail-minutes { white-space: pre-wrap; }
+#detail-knowledge .entry .title { font-weight: bold; color: #4a90d9; }
+
+/* ── Search View ──────────────────────────────────────────── */
+.search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+.search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; }
+.search-bar button { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; }
+#do-search { background: #4a90d9; color: white; }
+#back-btn { background: #95a5a6; color: white; }
+
+#search-results .result-item { background: white; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+#search-results .result-item .title { font-weight: bold; color: #4a90d9; }
+#search-results .result-item .score { color: #888; font-size: 12px; }
+#search-results .result-item .body { margin-top: 5px; }
+
+/* ── Misc ─────────────────────────────────────────────────── */
+.hidden { display: none; }
+.error { color: #e74c3c; }

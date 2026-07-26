@@ -1,0 +1,5 @@
+entrypoint: "python jobs/knowledge_extract/main.py"
+dependencies:
+  - httpx
+resources:
+  num_cpus: 1

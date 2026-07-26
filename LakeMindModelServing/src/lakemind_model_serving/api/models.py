@@ -12,10 +12,8 @@ class CreateModelRequest(BaseModel):
     name: str
     model_type: str
     provider: str
+    provider_id: str | None = None
     source: str = "external"
-    litellm_model: str = ""
-    api_key: str = ""
-    base_url: str = ""
     model_path: str = ""
     config: dict | None = None
     capabilities: list | None = None

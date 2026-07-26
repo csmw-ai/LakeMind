@@ -16,21 +16,26 @@ interface TestResult {
 }
 
 const MODEL_TYPES = ['chat', 'embedding', 'asr'];
-const PROVIDERS = ['openai', 'anthropic', 'modelarts', 'ollama', 'fastembed', 'faster-whisper', 'funasr'];
+const LOCAL_BACKENDS = ['fastembed', 'sensevoice-funasr', 'faster-whisper'];
+const PROVIDER_TYPES = ['openai', 'anthropic', 'ollama', 'azure', 'gemini', 'bedrock'];
 
 export default function ModelServing() {
   const [models, setModels] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState<any>(null);
+  const [editingProvider, setEditingProvider] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [modelForm] = Form.useForm();
   const [profileForm] = Form.useForm();
+  const [providerForm] = Form.useForm();
   const [sourceType, setSourceType] = useState<string>('external');
 
   const loadData = () => {
@@ -38,7 +43,8 @@ export default function ModelServing() {
     Promise.all([
       api.get('/models').then(r => Array.isArray(r.data) ? r.data : r.data?.data || r.data?.items || []),
       api.get('/profiles').then(r => Array.isArray(r.data) ? r.data : r.data?.data || r.data?.items || []).catch(() => []),
-    ]).then(([m, p]) => { setModels(m); setProfiles(p); }).finally(() => setLoading(false));
+      api.get('/providers').then(r => Array.isArray(r.data) ? r.data : r.data?.data || r.data?.items || []).catch(() => []),
+    ]).then(([m, p, pv]) => { setModels(m); setProfiles(p); setProviders(pv); }).finally(() => setLoading(false));
   };
 
   useEffect(() => { loadData(); }, []);
@@ -61,7 +67,7 @@ export default function ModelServing() {
     setEditingModel(null);
     setSourceType('external');
     modelForm.resetFields();
-    modelForm.setFieldsValue({ source: 'external', model_type: 'chat', provider: 'openai', priority: 100, status: 'enabled' });
+    modelForm.setFieldsValue({ source: 'external', model_type: 'chat', priority: 100, status: 'enabled' });
     setModelModalOpen(true);
   }
 
@@ -72,11 +78,9 @@ export default function ModelServing() {
     modelForm.setFieldsValue({
       name: record.name,
       model_type: record.model_type,
+      provider_id: record.provider_id,
       provider: record.provider,
       source: src,
-      litellm_model: record.litellm_model,
-      api_key: record.api_key,
-      base_url: record.base_url,
       model_path: record.model_path,
       config: record.model_config ? JSON.stringify(record.model_config) : '{}',
       capabilities: (record.capabilities || []).join(', '),
@@ -94,16 +98,15 @@ export default function ModelServing() {
       const payload: any = {
         name: values.name,
         model_type: values.model_type,
-        provider: values.provider,
         source: values.source,
         priority: values.priority || 100,
       };
       if (values.source === 'external') {
-        payload.litellm_model = values.litellm_model;
-        payload.api_key = values.api_key;
-        payload.base_url = values.base_url;
+        payload.provider_id = values.provider_id;
+        payload.provider = providers.find(p => p.provider_id === values.provider_id)?.name || '';
         payload.context_length = values.context_length;
       } else {
+        payload.provider = values.provider;
         payload.model_path = values.model_path;
         payload.config = values.config ? JSON.parse(values.config) : {};
         payload.embedding_dim = values.embedding_dim;
@@ -143,6 +146,53 @@ export default function ModelServing() {
       message.error(e?.response?.data?.detail || `Failed to ${action} model`);
     }
   };
+
+  function openAddProvider() {
+    setEditingProvider(null);
+    providerForm.resetFields();
+    providerForm.setFieldsValue({ type: 'openai', status: 'enabled' });
+    setProviderModalOpen(true);
+  }
+
+  function openEditProvider(record: any) {
+    setEditingProvider(record);
+    providerForm.setFieldsValue({
+      name: record.name,
+      type: record.type,
+      base_url: record.base_url,
+      api_key: record.api_key,
+      status: record.status,
+    });
+    setProviderModalOpen(true);
+  }
+
+  async function handleSaveProvider() {
+    try {
+      const values = await providerForm.validateFields();
+      setSubmitting(true);
+      if (editingProvider) {
+        await api.put(`/providers/${editingProvider.provider_id}`, values);
+        message.success('Provider updated');
+      } else {
+        await api.post('/providers', values);
+        message.success('Provider created');
+      }
+      setProviderModalOpen(false);
+      loadData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Failed to save provider');
+    } finally { setSubmitting(false); }
+  }
+
+  async function handleDeleteProvider(providerId: string) {
+    try {
+      await api.delete(`/providers/${providerId}`);
+      message.success('Provider deleted');
+      loadData();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Failed to delete provider');
+    }
+  }
 
   function openAddProfile() {
     setEditingProfile(null);
@@ -190,17 +240,41 @@ export default function ModelServing() {
     }
   }
 
+  const providerColumns = [
+    { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <strong>{v}</strong> },
+    { title: 'Type', dataIndex: 'type', key: 'type', render: (v: string) => <Tag color="cyan">{v}</Tag> },
+    { title: 'Base URL', dataIndex: 'base_url', key: 'base_url', ellipsis: true, render: (v: string) => v ? <Tooltip title={v}>{v}</Tooltip> : '—' },
+    { title: 'API Key', dataIndex: 'api_key', key: 'api_key', render: (v: string) => v ? '••••••' : '—' },
+    { title: 'Status', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={v === 'enabled' ? 'green' : 'red'}>{v}</Tag> },
+    {
+      title: 'Actions', key: 'actions', width: 120,
+      render: (_: any, record: any) => (
+        <Space size="small">
+          <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditProvider(record)}>Edit</Button>
+          <Popconfirm title="Delete this provider?" onConfirm={() => handleDeleteProvider(record.provider_id)}>
+            <Button size="small" type="link" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
   const modelColumns = [
     { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <strong>{v}</strong> },
     { title: 'Type', dataIndex: 'model_type', key: 'model_type', render: (v: string) => <Tag color="purple">{v}</Tag> },
-    { title: 'Provider', dataIndex: 'provider', key: 'provider' },
+    {
+      title: 'Provider', key: 'provider', render: (_: any, record: any) => {
+        if (record.source === 'external') return record.provider_name || record.provider || '—';
+        return <Tag color="blue">{record.provider}</Tag>;
+      },
+    },
     { title: 'Source', dataIndex: 'source', key: 'source', render: (v: string) => <Tag color={v === 'local' ? 'blue' : 'green'}>{v}</Tag> },
     { title: 'Status', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={v === 'enabled' ? 'green' : 'red'}>{v}</Tag> },
     { title: 'Health', dataIndex: 'health_status', key: 'health_status', render: (v: string) => <Tag color={v === 'healthy' ? 'green' : v === 'unhealthy' ? 'red' : 'default'}>{v}</Tag> },
     {
       title: 'Detail', key: 'detail', ellipsis: true,
       render: (_: any, record: any) => {
-        if (record.source === 'external') return <Tooltip title={record.base_url}>{record.litellm_model || record.provider}</Tooltip>;
+        if (record.source === 'external') return <Tooltip title={record.provider_base_url}>{record.provider_type ? `${record.provider_type}/${record.name}` : record.provider}</Tooltip>;
         return <Tooltip title={record.model_path}>{record.model_path || '—'}</Tooltip>;
       },
     },
@@ -258,6 +332,17 @@ export default function ModelServing() {
     <>
       <Tabs items={[
         {
+          key: 'providers', label: 'Providers',
+          children: (
+            <Card>
+              <Space style={{ marginBottom: 16 }}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={openAddProvider}>Add Provider</Button>
+              </Space>
+              <Table dataSource={providers} columns={providerColumns} rowKey="provider_id" loading={loading} pagination={{ pageSize: 20 }} size="small" />
+            </Card>
+          ),
+        },
+        {
           key: 'models', label: 'Models',
           children: (
             <Card>
@@ -294,6 +379,20 @@ export default function ModelServing() {
         },
       ]} />
 
+      <Modal title={editingProvider ? "Edit Provider" : "Add Provider"} open={providerModalOpen} onOk={handleSaveProvider} onCancel={() => setProviderModalOpen(false)} confirmLoading={submitting} width={500}>
+        <Form form={providerForm} layout="vertical">
+          <Form.Item name="name" label="Provider Name" rules={[{ required: true }]}><Input placeholder="e.g. modelarts, openai, ollama" /></Form.Item>
+          <Form.Item name="type" label="Type" rules={[{ required: true }]}>
+            <Select options={PROVIDER_TYPES.map(t => ({ value: t }))} />
+          </Form.Item>
+          <Form.Item name="base_url" label="Base URL"><Input placeholder="https://api.openai.com/v1" /></Form.Item>
+          <Form.Item name="api_key" label="API Key"><Input.Password placeholder="sk-xxx" /></Form.Item>
+          <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+            <Select options={[{ value: 'enabled' }, { value: 'disabled' }]} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       <Modal title={editingModel ? "Edit Model" : "Add Model"} open={modelModalOpen} onOk={handleSaveModel} onCancel={() => setModelModalOpen(false)} confirmLoading={submitting} width={600}>
         <Form form={modelForm} layout="vertical">
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input placeholder="e.g. deepseek-v4-flash" /></Form.Item>
@@ -306,19 +405,22 @@ export default function ModelServing() {
               <Radio.Button value="local">Local (offline files)</Radio.Button>
             </Radio.Group>
           </Form.Item>
-          <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
-            <Select options={PROVIDERS.map(p => ({ value: p }))} />
-          </Form.Item>
 
           {sourceType === 'external' ? (
             <>
-              <Form.Item name="litellm_model" label="litellm Model"><Input placeholder="openai/deepseek-v4-flash" /></Form.Item>
-              <Form.Item name="api_key" label="API Key"><Input.Password placeholder="sk-xxx" /></Form.Item>
-              <Form.Item name="base_url" label="Base URL"><Input placeholder="https://api.openai.com/v1" /></Form.Item>
+              <Form.Item name="provider_id" label="Provider" rules={[{ required: true }]}>
+                <Select
+                  placeholder="Select a provider"
+                  options={providers.map(p => ({ value: p.provider_id, label: `${p.name} (${p.type})` }))}
+                />
+              </Form.Item>
               <Form.Item name="context_length" label="Context Length"><InputNumber style={{ width: '100%' }} /></Form.Item>
             </>
           ) : (
             <>
+              <Form.Item name="provider" label="Backend" rules={[{ required: true }]}>
+                <Select options={LOCAL_BACKENDS.map(b => ({ value: b }))} />
+              </Form.Item>
               <Form.Item name="model_path" label="Model Path" rules={[{ required: true }]}><Input placeholder="/data/asr_models/whisper-large-v3-turbo" /></Form.Item>
               <Form.Item name="config" label="Config (JSON)"><Input.TextArea rows={2} placeholder='{"device": "cpu", "compute_type": "int8"}' /></Form.Item>
               <Form.Item name="embedding_dim" label="Embedding Dim"><InputNumber style={{ width: '100%' }} /></Form.Item>

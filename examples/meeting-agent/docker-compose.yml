@@ -1,0 +1,32 @@
+services:
+  meeting-agent:
+    build: .
+    container_name: meeting-agent
+    ports:
+      - "9100:9100"
+    environment:
+      SERVER_API_URL: http://lakemind-server-api:10823
+      SERVER_API_KEY: ljLH3bvzIFjG4r3zeCP6AsHsGEnbmAQY_Hi3dW7du5o
+      MODEL_SERVING_URL: http://lakemind-model-serving:10824
+      MODELSERVING_API_KEY: lakemind-modelserving-key
+      TENANT_ID: examples-meeting-agent
+      SKILL_REF: lake://skills/meeting-processing@0.2.0
+      S3_BUCKET: lakemind-filesets
+      DB_PATH: /data/meeting-agent.db
+      PORT: "9100"
+      ASSET_MCP_URL: http://lakemind-asset-mcp:8401/mcp
+      DATA_MCP_URL: http://lakemind-data-mcp:8402/mcp
+      MCP_TOKEN: meeting-agent-mcp-token
+    volumes:
+      - meeting-agent-data:/data
+    networks:
+      - lakemind
+    restart: unless-stopped
+
+volumes:
+  meeting-agent-data:
+
+networks:
+  lakemind:
+    external: true
+    name: lakemind_lakemind

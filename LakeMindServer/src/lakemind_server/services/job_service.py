@@ -90,7 +90,7 @@ class JobService:
         )
 
         running_count = execute_one(
-            "SELECT count(*) AS c FROM job_runs WHERE tenant_id = %s AND status IN ('QUEUED','RUNNING')",
+            "SELECT count(*) AS c FROM job_runs WHERE tenant_id = %s AND status = 'RUNNING'",
             (ctx.tenant_id,),
         )
         if running_count and running_count["c"] >= _TENANT_LIMITS["max_concurrent"]:

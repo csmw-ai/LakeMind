@@ -15,13 +15,14 @@ Agent 通过 MCP 检索和存取知识、记忆、技能等认知资产，通过
 | 目录 | 平面 | 职责 | 状态 |
 |------|------|------|------|
 | `LakeMindServer/` | 数据平面 | 存储与计算底座（REST API + 10 引擎 + 13 容器） | ✅ 已完成 |
-| `LakeMindModelServing/` | 模型平面 | 统一模型服务（litellm 网关 + fastembed 嵌入 + SenseVoice funasr 语音识别） | ✅ 已完成 |
+| `LakeMindModelServing/` | 模型平面 | 统一模型服务（Provider 实体 + litellm 网关 + fastembed 嵌入 + SenseVoice funasr 语音识别） | ✅ 已完成 |
 | `LakeMindMCP/` | 运行平面 | 3 MCP 编排（docker-compose + --profile all） | ✅ 已完成 |
 | `LakeMindMCP/LakeMindAssetMCP/` | 运行平面 | 资产面 MCP（知识/记忆/技能/本体），23 tools | ✅ 已完成 |
 | `LakeMindMCP/LakeMindDataMCP/` | 运行平面 | 数据面 MCP（通过 REST API 透传，不做语义包装），24 tools | ✅ 已完成 |
 | `LakeMindMCP/LakeMindAdminMCP/` | 运行平面 | 管理面 MCP（用户/租户/Token/健康），21 tools | ✅ 已完成 |
 | `LakeMindControlCenter/` | 运行平面 | 统一管理入口（前端 + BFF + Steward，10 页面） | ✅ v0.2.0 |
 | `LakeMindStudio/` | 开发平面 | 资产设计、MCP 调试、Skill 脚手架（Tauri） | ❌ 未开始（P2） |
+| `examples/` | 示例 | meeting-agent（会议全链路）+ lakemind-connector（Skill 演示） | ✅ 已完成 |
 
 ## 3. 访问拓扑
 
@@ -95,6 +96,7 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 - **长期记忆双表设计** — Lance 向量表 + PG 元信息小表，通过 `lance_uri` 关联，不合并成单表。
 - **LLM 网关是内部能力** — litellm 网关独立为 LakeMindModelServing，不通过 MCP 暴露，Agent 使用自己的 LLM。
 - **LLM 网关独立为 LakeMindModelServing** — litellm 替代手写 GatewayLLM，新增 ASR，统一模型服务。Steward 通过 ModelServing LLM 驱动对话。
+- **Provider 实体（v0.2.0）** — `ms_providers` 表持有连接配置（type/base_url/api_key），`ms_models` 通过 `provider_id` FK 关联。litellm_model 不再暴露给用户，由内部自动拼装 `f"{provider.type}/{model.name}"`。ControlCenter 提供 Provider/Model/Profile 三层管理。
 
 ## 8. 约定
 
@@ -113,6 +115,7 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 - 代码不加注释，除非逻辑非显而易见。
 - 设计文档用中文，代码标识符用英文。
 - PowerShell 下读写中文文件名需设置 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`。
+- **禁止对运行容器打热补丁**（`docker exec` + sed/echo 改 site-packages 等）。任何对平台代码的修复必须：① 改对应源码目录（如 `LakeMindModelServing/src/`）→ ② 重建镜像（`docker build` / `docker buildx bake`）→ ③ `docker compose up -d` 重建容器 → ④ 验证。热补丁在容器重建时丢失，已多次导致问题复发。
 
 ## 9. 详细文档索引
 

@@ -1,0 +1,8 @@
+INFO:     Started server process [16368]
+INFO:     Waiting for application startup.
+2026-07-12 15:35:24,789 INFO httpx: HTTP Request: POST http://localhost:10823/api/v1/metadata/tenants "HTTP/1.1 200 OK"
+2026-07-12 15:35:24,804 INFO httpx: HTTP Request: GET http://localhost:10823/api/v1/storage/tables/examples-meeting-agent_data "HTTP/1.1 200 OK"
+2026-07-12 15:35:24,809 INFO meeting-agent: task table exists: examples-meeting-agent_data.meeting_tasks
+2026-07-12 15:35:24,810 INFO meeting-agent: MeetingAgent ready (skill_uri=lake://skills/meeting-processing, tenant=retail)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9100 (Press CTRL+C to quit)

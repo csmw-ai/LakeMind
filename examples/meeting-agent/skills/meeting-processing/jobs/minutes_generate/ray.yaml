@@ -1,0 +1,5 @@
+entrypoint: "python jobs/minutes_generate/main.py"
+dependencies:
+  - httpx
+resources:
+  num_cpus: 1

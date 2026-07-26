@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LakeMind Meeting Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+    <header>
+        <h1>LakeMind Meeting Agent</h1>
+        <div class="header-actions">
+            <button id="search-btn" class="header-btn">知识检索</button>
+            <button id="home-btn" class="header-btn header-btn-secondary">任务展廊</button>
+        </div>
+    </header>
+
+    <!-- View 1: Task Gallery (homepage) -->
+    <div id="gallery-view">
+        <div class="gallery-header">
+            <h2>会议转录任务</h2>
+            <button id="new-meeting-btn" class="primary-btn">+ 新建会议转录</button>
+        </div>
+        <div id="task-list" class="task-grid">
+            <p class="loading-hint">加载中...</p>
+        </div>
+    </div>
+
+    <!-- View 2: Recording (new meeting) -->
+    <div id="record-view" class="hidden">
+        <div class="meeting-config">
+            <label>会议标题: <input id="meeting-title" type="text" value="项目评审会" placeholder="会议标题"></label>
+            <label>参会人: <input id="participants" type="text" value="张三,李四" placeholder="参会人"></label>
+        </div>
+
+        <div class="recording-area">
+            <button id="record-btn" class="record-btn">● 录音</button>
+            <span id="status-text">状态: 待开始</span>
+            <span id="timer">00:00</span>
+            <span id="chunk-count">chunks: 0</span>
+        </div>
+
+        <div class="panels">
+            <div class="panel">
+                <h3>实时转写</h3>
+                <div id="transcript" class="panel-content"></div>
+            </div>
+            <div class="panel">
+                <h3>实时纪要</h3>
+                <div id="minutes" class="panel-content"></div>
+            </div>
+            <div class="panel">
+                <h3>已发现知识 <span id="knowledge-count">(0)</span></h3>
+                <div id="knowledge" class="panel-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View 3: Task Detail (view past meeting) -->
+    <div id="detail-view" class="hidden">
+        <div class="detail-header">
+            <button id="detail-back-btn" class="header-btn header-btn-secondary">← 返回</button>
+            <h2 id="detail-title"></h2>
+            <div id="detail-meta" class="detail-meta"></div>
+        </div>
+        <div class="panels">
+            <div class="panel">
+                <h3>转写全文</h3>
+                <div id="detail-transcript" class="panel-content"></div>
+            </div>
+            <div class="panel">
+                <h3>会议纪要</h3>
+                <div id="detail-minutes" class="panel-content"></div>
+            </div>
+            <div class="panel">
+                <h3>知识条目 <span id="detail-knowledge-count">(0)</span></h3>
+                <div id="detail-knowledge" class="panel-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View 4: Search (knowledge retrieval) -->
+    <div id="search-view" class="hidden">
+        <div class="search-bar">
+            <input id="search-query" type="text" placeholder="搜索知识..." value="">
+            <button id="do-search">搜索</button>
+            <button id="back-btn">返回</button>
+        </div>
+        <div id="search-results"></div>
+    </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

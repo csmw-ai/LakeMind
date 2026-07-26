@@ -1,6 +1,6 @@
 # STATE.md — LakeMind 项目开发进展状态
 
-> 最后更新：2026-07-25（v0.2.2-asr-vad）
+> 最后更新：2026-07-26（v0.2.0-release）
 > 总文件：`AGENTS.md`，设计规范：`.agent/DESIGN.md`，开发规范：`.agent/SPEC.md`
 
 ---
@@ -44,13 +44,16 @@
 | **v0.2.2 ASR 改进** | ONNX 自定义后端废弁 → funasr 官方库（自带标点 + ITN，PyTorch CPU 推理 ~2s） | ✅ 完成 |
 | **v0.2.2 ASR VAD+Hotwords** | fsmn-vad 语音活动检测 + 30 领域 hotwords + ffmpeg loudnorm 归一化 + job 并发 10→30 | ✅ 完成 |
 | **v0.2.1 Jobs API 修复** | 3 bug：duplicate app=FastAPI() 丢 lifespan + get_skill("latest") 未解析 + S3 URI 未解析 | ✅ 完成 |
+| **v0.2.0 Provider 重构** | ms_providers 实体 + ms_models 删 litellm_model/api_key/base_url + litellm_model 内部自动拼装 + ControlCenter Provider tab | ✅ 完成 |
+| **v0.2.0 Job Sync 修复** | Ray QUEUED 状态映射 + 并发限制只计 RUNNING + sync_all 回收 RUNNING→QUEUED | ✅ 完成 |
+| **v0.2.0 examples/ 迁入** | meeting-agent + lakemind-connector 从 lakemind-examples 迁回主仓库 | ✅ 完成 |
 | LakeMindStudio | Tauri 桌面客户端 | ❌ 未开始 |
 
 ---
 
 ## 2. 容器运行状态
 
-> 检查时间：2026-07-19
+> 检查时间：2026-07-26
 
 | 容器 | 端口 | 状态 | 用途 |
 |------|------|------|------|
@@ -203,9 +206,10 @@ memory:          True
 ### 5.5 LakeMindControlCenter — 100% (v0.2.0)
 
 - ✅ 前端（nginx :3000）+ BFF（FastAPI :3001）+ Steward（LangGraph :3002）
-- ✅ 10 页面：Overview, Assets, Jobs, ModelServing, Services, Configuration, Security, Operations, Audit, Steward
+- ✅ 15 页面：Overview, Assets, Jobs, ModelServing, Services, Configuration, Security, Operations, Audit, Steward, MissionControl, Organization, Search, Notifications, Login
 - ✅ Mission Control（11 指标卡，统一了 v0.1.0 的 Monitor）
-- ✅ 模型配置与路由管理（Definition/Deployment/Profile/Route CRUD + 部署检测）
+- ✅ 模型配置与路由管理（Provider/Model/Profile CRUD + 部署检测）
+- ✅ Provider 管理（v0.2.0 新增：ms_providers 实体 CRUD，model 通过 provider_id 关联，litellm_model 内部自动拼装）
 - ✅ Steward 对话（LangGraph 巡检 + LLM 对话 via ModelServing）
 - ✅ BFF session 认证 + Control Plane API 代理
 
@@ -213,9 +217,11 @@ memory:          True
 
 - ✅ FastAPI 服务（:10824）
 - ✅ litellm Router（多 provider 路由 + fallback，timeout=120s, num_retries=3）
+- ✅ Provider 实体（ms_providers 表，name/type/base_url/api_key，model 通过 provider_id 关联）
 - ✅ fastembed 本地嵌入（jina-embeddings-v2-base-zh, dim=768）
 - ✅ SenseVoice 本地 ASR（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN）
-- ✅ ONNX 自定义后端已废弁（由 funasr 官方库替代，标点 + ITN 由模型内建产出）
+- ✅ fsmn-vad VAD + 30 领域 hotwords + ffmpeg loudnorm 归一化
+- ✅ ONNX 自定义后端已废弁（由 funasr 官方库替代）
 - ✅ OpenAI 兼容 API
 
 ### 5.7 LakeMindStudio — 0%
@@ -235,7 +241,7 @@ memory:          True
 | 3 | publish_skill.py 在容器内缺 yaml 包 | 容器内发布 skill 失败 | P3 | 不阻塞，从主机发布 |
 | 4 | Server skill register/publish API 无 PUT | 无法通过 API 更新 skill | P3 | 不阻塞 |
 | 5 | Arrow 端点未接入 Knowledge outbox worker | 真实向量写入仍走 JSON | P1 | 待接入 |
-| 6 | v4 改动通过 docker cp 部署，未进正式镜像 | 需 DNS 恢复后重建 | P1 | 待重建 |
+| 6 | ~~v4 改动通过 docker cp 部署~~ | 已修复，全部进入正式镜像 | ✅ 已修复 |
 | 7 | uvicorn workers>1 在 Docker Desktop 下异常 | IPv6 端口转发问题 | P3 | workers=1 可用 |
 | 8 | 3 MCP config.py 95% 重复 | 复制粘贴，各自演化 | P2 | 后续提取 LakeMindMCPShared 包 |
 

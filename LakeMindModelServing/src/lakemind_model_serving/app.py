@@ -9,7 +9,7 @@ from .gateway import ModelGateway
 from .registry import ModelRegistry
 from .services.embedding import EmbeddingManager
 from .services.asr import ASRManager
-from .api import chat, embeddings, audio, models, health, profiles
+from .api import chat, embeddings, audio, models, health, profiles, providers
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(audio.router, tags=["audio"])
     app.include_router(models.router, tags=["models"])
     app.include_router(profiles.router, tags=["profiles"])
+    app.include_router(providers.router, tags=["providers"])
     app.include_router(health.router, tags=["health"])
 
     return app
@@ -68,6 +69,8 @@ def _config_to_dict(cfg) -> dict:
         return obj
 
     return {
+        "providers": serialize(cfg.providers),
+        "models": serialize(cfg.models),
         "llm_providers": serialize(cfg.llm_providers),
         "embedding": {"built_in": serialize(cfg.embedding.built_in)},
         "asr": {"built_in": serialize(cfg.asr.built_in), "total_concurrency": cfg.asr.total_concurrency},

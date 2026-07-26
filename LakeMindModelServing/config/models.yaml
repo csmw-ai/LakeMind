@@ -11,47 +11,35 @@ gateway:
     embed: ["jina-embeddings-v2-base-zh"]
   cache: false
 
-llm_providers:
+providers:
   - name: "modelarts"
     type: "openai"
     base_url: "https://api.modelarts-maas.com/openai/v1"
     api_key: "${MAAS_API_KEY}"
-    models:
-      - id: "deepseek-v4-flash"
-        litellm_model: "openai/deepseek-v4-flash"
-        context: 64000
-        tags: [chat]
-    priority: 1
-  # ── OpenAI ──
   # - name: "openai"
   #   type: "openai"
+  #   base_url: "https://api.openai.com/v1"
   #   api_key: "${OPENAI_API_KEY}"
-  #   models:
-  #     - id: "gpt-4o-mini"
-  #       litellm_model: "openai/gpt-4o-mini"
-  #       context: 128000
-  #       tags: [chat]
-  #   priority: 2
-  # ── Anthropic ──
-  # - name: "anthropic"
-  #   type: "anthropic"
-  #   api_key: "${ANTHROPIC_API_KEY}"
-  #   models:
-  #     - id: "claude-3-haiku-20240307"
-  #       litellm_model: "anthropic/claude-3-haiku-20240307"
-  #       context: 200000
-  #       tags: [chat]
-  #   priority: 3
-  # ── Ollama 本地 ──
   # - name: "ollama"
   #   type: "ollama"
   #   base_url: "http://host.docker.internal:11434"
-  #   models:
-  #     - id: "qwen2.5:7b"
-  #       litellm_model: "ollama/qwen2.5:7b"
-  #       context: 32768
-  #       tags: [chat]
-  #   priority: 4
+  #   api_key: "ollama"
+
+models:
+  - name: "deepseek-v4-flash"
+    model_type: "chat"
+    provider: "modelarts"
+    source: "external"
+    context_length: 64000
+    capabilities: [chat]
+    priority: 1
+  # - name: "gpt-4o-mini"
+  #   model_type: "chat"
+  #   provider: "openai"
+  #   source: "external"
+  #   context_length: 128000
+  #   capabilities: [chat, vision]
+  #   priority: 2
 
 embedding:
   built_in:
@@ -61,11 +49,6 @@ embedding:
     dim: 768
     cache_dir: "/data/fastembed_cache"
   external: []
-    # - model_id: "text-embedding-3-small"
-    #   provider: "openai"
-    #   litellm_model: "openai/text-embedding-3-small"
-    #   api_key: "${OPENAI_API_KEY}"
-    #   dim: 1536
 
 asr:
   total_concurrency: 2
@@ -88,9 +71,6 @@ asr:
     max_upload_mb: 100
     request_timeout_seconds: 600
   external: []
-    # - model_id: "whisper-api"
-    #   endpoint: "https://api.openai.com/v1/audio/transcriptions"
-    #   api_key: "${OPENAI_API_KEY}"
 
 registry:
   host: "lakemind-postgres"

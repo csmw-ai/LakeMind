@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.env
+agent.log
+agent.err
+*.zip
+UPGRADE_PLAN.md
+DESIGN.md
+README.md
+frontend/node_modules/
+.git/
+agent.py
+lakemind_client.py
+static/

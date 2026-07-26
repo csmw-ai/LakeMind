@@ -1,0 +1,13 @@
+[project]
+name = "opencode-lakemind-connector"
+version = "0.1.0"
+description = "opencode AI Agent 通过 Skill 接入 LakeMind — MCP 认知资产存取"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "mcp>=1.28",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"

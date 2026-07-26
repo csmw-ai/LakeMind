@@ -1,0 +1,18 @@
+[project]
+name = "meeting-agent"
+version = "0.1.0"
+description = "会议实时知识化 Agent — LakeMind 示例"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "mcp>=1.28",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"

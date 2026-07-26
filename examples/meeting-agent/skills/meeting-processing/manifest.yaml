@@ -1,0 +1,48 @@
+name: meeting-processing
+version: 0.2.0
+description: Meeting recording → transcript → minutes → knowledge extraction
+
+entry_point: jobs
+input_schema:
+  chunk_uri: string
+  result_key: string
+output_schema:
+  text: string
+  segments: array
+model_profiles:
+  - meeting-asr
+  - meeting-minutes
+  - meeting-knowledge-extract
+
+jobs:
+  asr_chunk:
+    description: Audio chunk → transcript segments
+    model_profile: meeting-asr
+    inputs:
+      chunk_uri: string
+      result_key: string
+    outputs:
+      text: string
+      segments: array
+
+  minutes_generate:
+    description: Transcript → meeting minutes markdown
+    model_profile: meeting-minutes
+    inputs:
+      transcript: string
+      meeting_title: string
+      template_snapshot: object
+      result_key: string
+    outputs:
+      minutes: string
+
+  knowledge_extract:
+    description: Transcript + minutes → structured knowledge items with evidence
+    model_profile: meeting-knowledge-extract
+    inputs:
+      transcript: string
+      minutes: string
+      template_snapshot: object
+      result_key: string
+    outputs:
+      items: array

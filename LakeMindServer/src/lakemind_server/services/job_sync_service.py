@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 _RAY_STATUS_MAP = {
     "PENDING": "QUEUED",
+    "QUEUED": "QUEUED",
     "RUNNING": "RUNNING",
     "SUCCEEDED": "SUCCEEDED",
     "FAILED": "FAILED",
@@ -68,6 +69,11 @@ class JobSyncService:
                 elif mapped == "RUNNING" and attempt["job_status"] != "RUNNING":
                     execute(
                         "UPDATE job_runs SET status = 'RUNNING', updated_at = now() WHERE job_id = %s AND status IN ('QUEUED','SUBMITTED')",
+                        (attempt["job_id"],),
+                    )
+                elif mapped == "QUEUED" and attempt["job_status"] == "RUNNING":
+                    execute(
+                        "UPDATE job_runs SET status = 'QUEUED', updated_at = now() WHERE job_id = %s",
                         (attempt["job_id"],),
                     )
 

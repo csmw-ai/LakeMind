@@ -646,6 +646,16 @@ async def _ms_passthrough(request: Request, target_path: str):
         return JSONResponse(content=data, status_code=resp.status_code)
 
 
+@app.api_route("/providers", methods=["GET", "POST"])
+async def providers_root(request: Request):
+    return await _ms_passthrough(request, "/v1/providers")
+
+
+@app.api_route("/providers/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def providers_proxy(request: Request, path: str):
+    return await _ms_passthrough(request, f"/v1/providers/{path}")
+
+
 @app.api_route("/models", methods=["GET", "POST"])
 async def models_root(request: Request):
     return await _ms_passthrough(request, "/v1/models")

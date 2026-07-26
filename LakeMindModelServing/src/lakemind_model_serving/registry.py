@@ -60,7 +60,7 @@ def _ulid(prefix: str) -> str:
 
 
 class ModelRegistry:
-    """ms_models + ms_model_profiles CRUD with hot-reload to runtime engines."""
+    """ms_providers + ms_models + ms_model_profiles CRUD with hot-reload to runtime engines."""
 
     def __init__(self, dsn: str, gateway=None, embedding_mgr=None, asr_mgr=None):
         self._dsn = dsn
@@ -76,15 +76,25 @@ class ModelRegistry:
     def _ensure_tables(self):
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS ms_providers (
+                    provider_id    TEXT PRIMARY KEY,
+                    name           TEXT NOT NULL UNIQUE,
+                    type           TEXT NOT NULL,
+                    base_url       TEXT,
+                    api_key        TEXT,
+                    status         TEXT NOT NULL DEFAULT 'enabled',
+                    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            """)
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS ms_models (
                     model_id         TEXT PRIMARY KEY,
                     name             TEXT NOT NULL UNIQUE,
                     model_type       TEXT NOT NULL,
                     provider         TEXT NOT NULL,
+                    provider_id      TEXT REFERENCES ms_providers(provider_id),
                     source           TEXT NOT NULL DEFAULT 'external',
-                    litellm_model    TEXT,
-                    api_key          TEXT,
-                    base_url         TEXT,
                     model_path       TEXT,
                     model_config     JSONB DEFAULT '{}',
                     capabilities     JSONB DEFAULT '[]',
@@ -114,7 +124,55 @@ class ModelRegistry:
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_ms_profiles_name ON ms_model_profiles(name)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_ms_profiles_tenant ON ms_model_profiles(tenant_id)")
+            self._migrate_legacy(cur)
             conn.commit()
+
+    def _migrate_legacy(self, cur):
+        cur.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ms_models' AND column_name = 'litellm_model'
+        """)
+        if not cur.fetchone():
+            return
+        logger.info("Migrating legacy ms_models schema (litellm_model/api_key/base_url -> ms_providers)...")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'ms_models' AND column_name = 'provider_id')
+                THEN
+                    ALTER TABLE ms_models ADD COLUMN provider_id TEXT REFERENCES ms_providers(provider_id);
+                END IF;
+            END $$;
+        """)
+        cur.execute("""
+            SELECT DISTINCT provider, api_key, base_url
+            FROM ms_models
+            WHERE source = 'external' AND provider_id IS NULL
+        """)
+        legacy_rows = cur.fetchall()
+        for prov_name, api_key_val, base_url_val in legacy_rows:
+            if not prov_name:
+                continue
+            cur.execute("SELECT provider_id FROM ms_providers WHERE name = %s", (prov_name,))
+            existing = cur.fetchone()
+            if existing:
+                pid = existing[0]
+            else:
+                pid = _ulid("prv")
+                cur.execute(
+                    """INSERT INTO ms_providers (provider_id, name, type, base_url, api_key)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (pid, prov_name, prov_name, base_url_val, api_key_val),
+                )
+            cur.execute(
+                "UPDATE ms_models SET provider_id = %s WHERE provider = %s AND source = 'external' AND provider_id IS NULL",
+                (pid, prov_name),
+            )
+        cur.execute("ALTER TABLE ms_models DROP COLUMN IF EXISTS litellm_model")
+        cur.execute("ALTER TABLE ms_models DROP COLUMN IF EXISTS api_key")
+        cur.execute("ALTER TABLE ms_models DROP COLUMN IF EXISTS base_url")
+        logger.info("Legacy migration complete: %d provider groups migrated", len(legacy_rows))
 
     # ── helpers ──
 
@@ -138,37 +196,108 @@ class ModelRegistry:
             cur.execute(sql, params or ())
             conn.commit()
 
+    # ── provider CRUD ──
+
+    def list_providers(self) -> list[dict]:
+        return self._query("SELECT * FROM ms_providers ORDER BY name")
+
+    def get_provider(self, provider_id: str) -> dict | None:
+        return self._query("SELECT * FROM ms_providers WHERE provider_id = %s", (provider_id,), one=True)
+
+    def get_provider_by_name(self, name: str) -> dict | None:
+        return self._query("SELECT * FROM ms_providers WHERE name = %s", (name,), one=True)
+
+    def create_provider(self, name: str, ptype: str, base_url: str = "",
+                        api_key: str = "", status: str = "enabled") -> dict:
+        provider_id = _ulid("prv")
+        enc_key = _encrypt_api_key(api_key)
+        self._execute(
+            """INSERT INTO ms_providers (provider_id, name, type, base_url, api_key, status)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (provider_id, name, ptype, base_url, enc_key, status),
+        )
+        return self.get_provider(provider_id)
+
+    def update_provider(self, provider_id: str, **fields) -> dict:
+        existing = self.get_provider(provider_id)
+        if not existing:
+            raise ValueError("PROVIDER_NOT_FOUND")
+        allowed = {"name", "type", "base_url", "api_key", "status"}
+        sets, params = [], []
+        for k, v in fields.items():
+            if k not in allowed or v is None:
+                continue
+            if k == "api_key":
+                v = _encrypt_api_key(v)
+            sets.append(f"{k} = %s")
+            params.append(v)
+        if not sets:
+            return existing
+        sets.append("updated_at = now()")
+        params.append(provider_id)
+        self._execute(f"UPDATE ms_providers SET {', '.join(sets)} WHERE provider_id = %s", tuple(params))
+        for model in self.list_models():
+            if model.get("provider_id") == provider_id and model["status"] == "enabled":
+                self._hot_unload(model["model_id"])
+                self._hot_load(model)
+        return self.get_provider(provider_id)
+
+    def delete_provider(self, provider_id: str) -> dict:
+        provider = self.get_provider(provider_id)
+        if not provider:
+            raise ValueError("PROVIDER_NOT_FOUND")
+        models = self.list_models()
+        for m in models:
+            if m.get("provider_id") == provider_id:
+                raise ValueError(f"PROVIDER_IN_USE: model '{m['name']}' still references this provider")
+        self._execute("DELETE FROM ms_providers WHERE provider_id = %s", (provider_id,))
+        return provider
+
     # ── model CRUD ──
 
     def is_empty(self) -> bool:
         return self._query("SELECT COUNT(*) AS cnt FROM ms_models", one=True)["cnt"] == 0
 
     def list_models(self, model_type: str | None = None) -> list[dict]:
+        sql = """
+            SELECT m.*, p.name AS provider_name, p.type AS provider_type, p.base_url AS provider_base_url
+            FROM ms_models m
+            LEFT JOIN ms_providers p ON m.provider_id = p.provider_id
+        """
         if model_type:
-            return self._query("SELECT * FROM ms_models WHERE model_type = %s ORDER BY priority, created_at", (model_type,))
-        return self._query("SELECT * FROM ms_models ORDER BY priority, created_at")
+            return self._query(sql + " WHERE m.model_type = %s ORDER BY m.priority, m.created_at", (model_type,))
+        return self._query(sql + " ORDER BY m.priority, m.created_at")
 
     def get_model(self, model_id: str) -> dict | None:
-        return self._query("SELECT * FROM ms_models WHERE model_id = %s", (model_id,), one=True)
+        return self._query("""
+            SELECT m.*, p.name AS provider_name, p.type AS provider_type, p.base_url AS provider_base_url
+            FROM ms_models m
+            LEFT JOIN ms_providers p ON m.provider_id = p.provider_id
+            WHERE m.model_id = %s
+        """, (model_id,), one=True)
 
     def get_model_by_name(self, name: str) -> dict | None:
-        return self._query("SELECT * FROM ms_models WHERE name = %s", (name,), one=True)
+        return self._query("""
+            SELECT m.*, p.name AS provider_name, p.type AS provider_type, p.base_url AS provider_base_url
+            FROM ms_models m
+            LEFT JOIN ms_providers p ON m.provider_id = p.provider_id
+            WHERE m.name = %s
+        """, (name,), one=True)
 
     def create_model(self, name: str, model_type: str, provider: str,
-                     source: str = "external", litellm_model: str = "",
-                     api_key: str = "", base_url: str = "",
+                     provider_id: str | None = None,
+                     source: str = "external",
                      model_path: str = "", model_config: dict | None = None,
                      capabilities: list | None = None, context_length: int | None = None,
                      embedding_dim: int | None = None, priority: int = 100,
                      status: str = "enabled") -> dict:
         model_id = _ulid("mdl")
-        enc_key = _encrypt_api_key(api_key)
         self._execute(
             """INSERT INTO ms_models
-               (model_id, name, model_type, provider, source, litellm_model, api_key, base_url,
+               (model_id, name, model_type, provider, provider_id, source,
                 model_path, model_config, capabilities, context_length, embedding_dim, priority, status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (model_id, name, model_type, provider, source, litellm_model, enc_key, base_url,
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (model_id, name, model_type, provider, provider_id, source,
              model_path, json.dumps(model_config or {}), json.dumps(capabilities or []),
              context_length, embedding_dim, priority, status),
         )
@@ -181,15 +310,13 @@ class ModelRegistry:
         existing = self.get_model(model_id)
         if not existing:
             raise ValueError("MODEL_NOT_FOUND")
-        allowed = {"name", "model_type", "provider", "source", "litellm_model", "api_key",
-                    "base_url", "model_path", "model_config", "capabilities",
+        allowed = {"name", "model_type", "provider", "provider_id", "source",
+                    "model_path", "model_config", "capabilities",
                     "context_length", "embedding_dim", "priority", "status"}
         sets, params = [], []
         for k, v in fields.items():
             if k not in allowed or v is None:
                 continue
-            if k == "api_key":
-                v = _encrypt_api_key(v)
             if k in ("model_config", "capabilities"):
                 v = json.dumps(v)
             sets.append(f"{k} = %s")
@@ -241,11 +368,18 @@ class ModelRegistry:
         try:
             t0 = time.time()
             if model["model_type"] == "chat":
+                provider = self.get_provider(model["provider_id"]) if model.get("provider_id") else None
+                api_key = provider["api_key"] if provider else ""
+                base_url = provider["base_url"] if provider else ""
                 payload = {"model": model["name"], "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}
-                headers = {"Authorization": f"Bearer {model.get('api_key', '')}", "Content-Type": "application/json"}
-                url = model.get("base_url", "")
-                if url and "/v1/chat" not in url:
-                    url = url.rstrip("/") + "/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                url = base_url
+                if url and "/chat/completions" not in url:
+                    url = url.rstrip("/")
+                    if "/v1" in url:
+                        url += "/chat/completions"
+                    else:
+                        url += "/v1/chat/completions"
                 r = httpx.post(url or "", json=payload, headers=headers, timeout=30)
                 result["status_code"] = r.status_code
                 result["success"] = r.status_code < 400
@@ -282,11 +416,13 @@ class ModelRegistry:
 
         try:
             if mtype == "chat" and self._gateway:
+                provider = self.get_provider(model["provider_id"]) if model.get("provider_id") else None
+                ptype = provider["type"] if provider else model.get("provider", "openai")
                 self._gateway.register_model({
                     "model_id": name,
-                    "litellm_model": model.get("litellm_model") or f"{model.get('provider', 'openai')}/{name}",
-                    "api_key": model.get("api_key", ""),
-                    "base_url": model.get("base_url", ""),
+                    "litellm_model": f"{ptype}/{name}",
+                    "api_key": provider["api_key"] if provider else "",
+                    "base_url": provider["base_url"] if provider else "",
                 })
             elif mtype == "embedding" and source == "local" and self._embedding_mgr:
                 self._embedding_mgr.register(
@@ -300,11 +436,13 @@ class ModelRegistry:
                 cfg["provider"] = model.get("provider", "faster-whisper")
                 self._asr_mgr.register(model_id=name, model_path=model.get("model_path", ""), config=cfg)
             elif source == "external" and self._gateway:
+                provider = self.get_provider(model["provider_id"]) if model.get("provider_id") else None
+                ptype = provider["type"] if provider else model.get("provider", "openai")
                 self._gateway.register_model({
                     "model_id": name,
-                    "litellm_model": model.get("litellm_model") or f"{model.get('provider', 'openai')}/{name}",
-                    "api_key": model.get("api_key", ""),
-                    "base_url": model.get("base_url", ""),
+                    "litellm_model": f"{ptype}/{name}",
+                    "api_key": provider["api_key"] if provider else "",
+                    "base_url": provider["base_url"] if provider else "",
                 })
             logger.info("Hot-loaded model: %s (%s/%s)", name, mtype, source)
         except Exception as e:
@@ -393,10 +531,11 @@ class ModelRegistry:
     def resolve_profile(self, profile_name: str, tenant_id: str | None = None) -> dict | None:
         row = self._query(
             """SELECT p.*, m.name AS model_name, m.model_type, m.provider,
-                      m.source, m.litellm_model, m.api_key, m.base_url,
-                      m.model_path, m.embedding_dim, m.model_config
+                      m.source, m.model_path, m.embedding_dim, m.model_config,
+                      prv.type AS provider_type, prv.api_key, prv.base_url
                FROM ms_model_profiles p
                JOIN ms_models m ON p.model_id = m.model_id
+               LEFT JOIN ms_providers prv ON m.provider_id = prv.provider_id
                WHERE p.name = %s
                  AND (p.tenant_id IS NULL OR p.tenant_id = %s)
                  AND m.status = 'enabled'""",
@@ -407,20 +546,55 @@ class ModelRegistry:
     # ── seed from yaml ──
 
     def seed_from_yaml(self, cfg):
-        imported = {"models": 0, "profiles": 0}
+        imported = {"providers": 0, "models": 0, "profiles": 0}
+
+        for p in cfg.get("providers", []):
+            pname = p.get("name", "")
+            if not pname or self.get_provider_by_name(pname):
+                continue
+            self.create_provider(
+                name=pname, ptype=p.get("type", "openai"),
+                base_url=p.get("base_url", ""), api_key=p.get("api_key", ""),
+            )
+            imported["providers"] += 1
+
+        for p in cfg.get("llm_providers", []):
+            pname = p.get("name", "")
+            if not pname or self.get_provider_by_name(pname):
+                continue
+            self.create_provider(
+                name=pname, ptype=p.get("type", "openai"),
+                base_url=p.get("base_url", ""), api_key=p.get("api_key", ""),
+            )
+            imported["providers"] += 1
+
+        for m in cfg.get("models", []):
+            name = m["name"]
+            if self.get_model_by_name(name):
+                continue
+            prov_name = m.get("provider", "")
+            prov = self.get_provider_by_name(prov_name) if prov_name else None
+            self.create_model(
+                name=name, model_type=m.get("model_type", "chat"),
+                provider=prov_name, provider_id=prov["provider_id"] if prov else None,
+                source=m.get("source", "external"),
+                capabilities=m.get("capabilities", ["chat"]),
+                context_length=m.get("context_length"),
+                priority=m.get("priority", 100),
+            )
+            imported["models"] += 1
 
         for provider in cfg.get("llm_providers", []):
-            api_key = provider.get("api_key", "")
-            base_url = provider.get("base_url", "")
+            prov_name = provider.get("name", "")
+            prov = self.get_provider_by_name(prov_name) if prov_name else None
+            prov_id = prov["provider_id"] if prov else None
             for m in provider.get("models", []):
                 name = m["id"]
                 if self.get_model_by_name(name):
                     continue
                 self.create_model(
-                    name=name, model_type="chat", provider=provider.get("type", "openai"),
-                    source="external",
-                    litellm_model=m.get("litellm_model", f"{provider.get('type', 'openai')}/{name}"),
-                    api_key=api_key, base_url=base_url,
+                    name=name, model_type="chat", provider=prov_name,
+                    provider_id=prov_id, source="external",
                     capabilities=m.get("tags", ["chat"]),
                     context_length=m.get("context"),
                     priority=provider.get("priority", 100),
@@ -498,7 +672,8 @@ class ModelRegistry:
                 self.create_profile(name="default", model_type="chat", model_id=chat_model["model_id"])
                 imported["profiles"] += 1
 
-        logger.info("Seeded %d models, %d profiles from yaml", imported["models"], imported["profiles"])
+        logger.info("Seeded %d providers, %d models, %d profiles from yaml",
+                    imported["providers"], imported["models"], imported["profiles"])
         return imported
 
     def health(self) -> bool:
