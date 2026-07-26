@@ -1,5 +1,99 @@
 # Changelog
 
+## v0.2.0 (2026-07-26)
+
+### Summary
+正式发版。认知资产存取平台 + 受控 Job Runtime。12 平台容器，10 引擎，68 MCP 工具，15 ControlCenter 页面。
+
+### Breaking Changes (vs v0.1.0)
+- **LakeMindSteward/ + LakeMindMonitor/ 已删除** — 合并迁入 `LakeMindControlCenter/`（Steward 内嵌 :3002，Monitor 迁为 Mission Control 页面）
+- **`execute_skill` 已移除** — 改为 JobService.submit(skill_ref, inputs) 受控执行
+- **DataMCP 5 个 Ray tools 替换** — 改为 JobService（`/api/v1/jobs/*`）
+- **ASR faster-whisper 废弁** — 替换为 SenseVoice funasr（自带标点 + ITN）
+
+### New Features
+
+#### ControlCenter（统一管理入口）
+- 前端 nginx :3000 + BFF FastAPI :3001 + Steward LangGraph :3002
+- 15 页面：Overview, Assets, Jobs, ModelServing, Services, Configuration, Security, Operations, Audit, Steward, MissionControl, Organization, Search, Notifications, Login
+- Mission Control：11 指标卡
+- Provider/Model/Profile 三层管理 + 部署检测
+
+#### Provider 实体（ms_providers 表）
+- `ms_providers` 表持有连接配置（name/type/base_url/api_key）
+- `ms_models` 通过 `provider_id` FK 关联，删除 `litellm_model`/`api_key`/`base_url` 列
+- litellm_model 内部自动拼装 `f"{provider.type}/{model.name}"`
+- DB 迁移自动执行（旧列检测 → 建 provider → 设 provider_id → drop 旧列）
+- ControlCenter Provider tab CRUD
+
+#### Job Runtime
+- JobService 受控执行，状态机（SUBMITTED→QUEUED→RUNNING→SUCCEEDED/FAILED/TIMED_OUT/CANCELLED/LOST）
+- RayExecutionBackend + JobSyncService（3s sync + 30s timeout）
+- JobArtifactService（Artifact → Knowledge/Memory）
+- 资源配额：Skill default + tenant limit + job override
+
+#### 模型管理（两层架构）
+- Definition（逻辑层）+ Deployment（物理层），1:N 关系
+- Profile 路由 + 部署检测（Test 按钮）
+- Secret Ref 替换（无明文 API key）
+
+#### RBAC + Control Plane
+- 5 builtin roles, 26 actions, SecurityContext + middleware
+- Token SHA-256 哈希，租户隔离，`lake://` scheme guard
+- 配置服务（schema 校验 + revision + rollback）
+- 实例注册 + 心跳，密钥 AES-256-GCM 加密，审计日志，操作状态机
+- Outbox（SKIP LOCKED + 指数退避）
+
+#### Meeting Agent v0.2.0
+- 浏览器录音 → ASR → 转写 → 纪要 → 知识 全链路走 MCP
+- 133 chunks → 31 ASR → 30 转写 → 6 版纪要 → 7 条知识
+- examples/ 迁回主仓库（meeting-agent + lakemind-connector）
+
+#### SenseVoice funasr ASR
+- funasr.AutoModel + PyTorch CPU 推理（~2s）
+- fsmn-vad VAD + 30 领域 hotwords + ffmpeg loudnorm 归一化
+- 自带标点 + ITN
+
+### Bug Fixes
+
+#### Job Sync（3 fixes）
+- `_RAY_STATUS_MAP` 加 `QUEUED→QUEUED`（Ray 2.41.0）
+- 并发限制 `status IN ('QUEUED','RUNNING')` → `status = 'RUNNING'`（QUEUED 不占并发槽）
+- `sync_all` 加 RUNNING→QUEUED 降级逻辑（Ray 重启后回收僵尸 job）
+
+#### Ray Job Lifecycle（7 fixes）
+- `check_timeouts()` / `_mark_lost()` 调用 `cancel()` 防僵尸进程
+- `entrypoint_num_cpus` / `entrypoint_memory`（正确 Ray API）
+- Unknown Ray status → `UNKNOWN`（不再虚增 RUNNING）
+- `cleanup_zombies()` 每 sync cycle 清理
+- `working_dir` + `scan_jobs()` 修复
+
+#### 性能优化（4 轮压测 3→7 PASS）
+- 向量搜索 p50 1400ms→60ms（23x），IVF_PQ 索引
+- Memory Add p99 11s→33ms（335x），精确锁
+- 并发错误率 86.8%→0%，asyncio.to_thread 包 49 个同步 I/O
+- Arrow IPC 向量入库 8081 vec/s（20x）
+
+#### 其他修复
+- 17 个 API 文件异步边界修复
+- Memory PG memory_hash_index 去重（替代全表扫描）
+- Steward WebSocket → fetch POST
+- 监控真实 HTTP 健康探测
+- ModelServing stream=true 返回 400
+- 33 个 E2E 空测试替换为真实 HTTP 测试
+- Memory 零向量回退移除
+
+### Infrastructure
+- 容器 13（v0.1.0）→ 12 平台容器（v0.2.0：control-center 统一）
+- 5 自研镜像：postgres-age, server-api, mcp-suite, model-serving, control-center
+- ACR：`crpi-jo6wxw17za9j0za4.cn-hangzhou.personal.cr.aliyuncs.com/lakemind`
+
+### Database Migrations
+- 001-006: v0.1.0 baseline + control_plane + asset_core + asset_types + job_runtime + model_management
+- ms_providers 表（Provider 实体，自动迁移）
+
+---
+
 ## v0.2.1-ray-fix (2026-07-24)
 
 ### Ray Job Lifecycle — 7 Bug Fixes
