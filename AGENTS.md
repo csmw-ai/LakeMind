@@ -39,8 +39,9 @@ LakeMindServer (:10823)  ← 统一 REST API，10 引擎
   SeaweedFS · PostgreSQL · Valkey · Ray
           │
           ▼
-LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + SenseVoice funasr）
-  Server / Ray workers ──→ ModelServing（嵌入 / LLM / ASR）
+LakeMindModelServing (:10824)  ← LLM 网关（litellm）+ 模型管理 API
+  Server / Ray workers ──→ ModelServing（LLM）
+  Server / Ray workers ──→ Ray Serve（ASR asr-app / Embedding embedding-app）
 ```
 
 - **MCP 是 Agent 唯一入口**，嵌入式引擎在 Server 进程中运行，MCP 通过 REST API 调用，不直连任何底层引擎。
@@ -60,10 +61,10 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 | 向量/多模态 | **PyLance + LanceDB** | 知识库向量、语义检索（PyPI 包名 `pylance`） |
 | 缓存 | **Valkey** | TTL KV（Redis 兼容协议，BSD 3-Clause） |
 | 即席计算 | **DuckDB** | 跨表 SQL、Parquet 直读 |
-| 分布式计算 | **Ray 2.41.0** | 3 节点 12 CPU（已实现） |
-| Embedding | **fastembed** | jinaai/jina-embeddings-v2-base-zh, dim=768（中英混合），由 ModelServing 提供 |
+| 分布式计算 | **Ray 2.41.0** | head(0 CPU) + worker(6 CPU) + ray-deploy(one-shot)，Ray Serve 承载 ASR + embedding |
+| Embedding | **fastembed** | jinaai/jina-embeddings-v2-base-zh, dim=768（中英混合），由 Ray Serve embedding-app 提供 |
 | LLM 网关 | **litellm** | 内部能力，路由多 provider（不通过 MCP 暴露）（PyPI 包名 `litellm`） |
-| ASR | **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN，fsmn-vad VAD + hotwords + loudnorm 归一化） |
+| ASR | **SenseVoice (funasr)** | 本地语音识别（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN，fsmn-vad VAD + hotwords + loudnorm 归一化），由 Ray Serve asr-app 提供 |
 | MCP SDK | **FastMCP** | tools + resources + prompts 三要素 |
 | Agent 框架 | **LangGraph** | Steward 巡检工作流 |
 
@@ -95,7 +96,8 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 - **Knowledge 采用 OKF 格式** — YAML frontmatter + markdown body，交叉链接存 PG 图。
 - **长期记忆双表设计** — Lance 向量表 + PG 元信息小表，通过 `lance_uri` 关联，不合并成单表。
 - **LLM 网关是内部能力** — litellm 网关独立为 LakeMindModelServing，不通过 MCP 暴露，Agent 使用自己的 LLM。
-- **LLM 网关独立为 LakeMindModelServing** — litellm 替代手写 GatewayLLM，新增 ASR，统一模型服务。Steward 通过 ModelServing LLM 驱动对话。
+- **LLM 网关独立为 LakeMindModelServing** — litellm 替代手写 GatewayLLM，统一模型服务。Steward 通过 ModelServing LLM 驱动对话。
+- **ASR/embedding 迁入 Ray Serve（v0.2.1）** — SenseVoice ASR + fastembed embedding 从 ModelServing 迁入 Ray Serve（asr-app + embedding-app），ModelServing 仅保留 litellm LLM 网关 + 模型管理 API。ray-worker 使用自定义镜像（torch CPU + funasr + fastembed + ffmpeg），ray-deploy one-shot 容器部署 Serve applications。外部容器通过 Ray Client（`ray://lakemind-ray-head:10001`）+ `serve.get_deployment_handle()` + `.result()` 调用。
 - **Provider 实体（v0.2.0）** — `ms_providers` 表持有连接配置（type/base_url/api_key），`ms_models` 通过 `provider_id` FK 关联。litellm_model 不再暴露给用户，由内部自动拼装 `f"{provider.type}/{model.name}"`。ControlCenter 提供 Provider/Model/Profile 三层管理。
 
 ## 8. 约定
@@ -105,6 +107,7 @@ LakeMindModelServing (:10824)  ← 统一模型服务（litellm + fastembed + Se
 - 构建定义：`docker-bake.hcl`（本地和 CI 的唯一构建入口）。
 - 依赖锁定：`uv.lock`（Python）+ `package-lock.json`（前端）。
 - 5 个自研镜像：`postgres-age`、`server-api`、`mcp-suite`、`model-serving`、`control-center`。
+- ray-worker 使用自定义镜像（基于 `rayproject/ray:2.41.0-py312` + torch CPU + funasr + fastembed + ffmpeg）。
 - 3 个 MCP 复用同一 `mcp-suite` 镜像，通过不同 `command` 启动。
 - Ray 使用官方镜像 `rayproject/ray:2.41.0-py312`。
 - 启动顺序：数据平面 → 运行平面 → 模型平面 → 管理平面。

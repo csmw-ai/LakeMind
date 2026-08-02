@@ -43,7 +43,8 @@ models:
 
 embedding:
   built_in:
-    enabled: true
+    enabled: false
+    ray_managed: true
     provider: "fastembed"
     model: "jinaai/jina-embeddings-v2-base-zh"
     dim: 768
@@ -53,9 +54,10 @@ embedding:
 asr:
   total_concurrency: 2
   built_in:
-    enabled: true
+    enabled: false
+    ray_managed: true
     required: false
-    preload: true
+    preload: false
     provider: "sensevoice-funasr"
     model_alias: "sensevoice-small"
     model_id: "iic/SenseVoiceSmall"

@@ -1,6 +1,6 @@
 # STATE.md — LakeMind 项目开发进展状态
 
-> 最后更新：2026-07-26（v0.2.0-release）
+> 最后更新：2026-08-02（v0.2.1 发版：Ray Serve 迁移 + meeting-agent 修复）
 > 总文件：`AGENTS.md`，设计规范：`.agent/DESIGN.md`，开发规范：`.agent/SPEC.md`
 
 ---
@@ -9,7 +9,7 @@
 
 ```
 数据平面  ████████████████████  100%  (REST API + 10 引擎 + Ray)
-模型平面  ████████████████████  100%  (litellm + fastembed + SenseVoice funasr)
+模型平面  ████████████████████  100%  (litellm LLM 网关 + 模型管理 API；ASR/embedding 已迁入 Ray Serve)
 运行平面  ████████████████████  100%  (3 MCP + ControlCenter 全完成)
 开发平面  ░░░░░░░░░░░░░░░░░░░░    0%  (Studio 未开始)
 示例      ████████████████████  100%  (meeting-agent v0.2.0 全链路 + lakemind-connector)
@@ -47,31 +47,33 @@
 | **v0.2.0 Provider 重构** | ms_providers 实体 + ms_models 删 litellm_model/api_key/base_url + litellm_model 内部自动拼装 + ControlCenter Provider tab | ✅ 完成 |
 | **v0.2.0 Job Sync 修复** | Ray QUEUED 状态映射 + 并发限制只计 RUNNING + sync_all 回收 RUNNING→QUEUED | ✅ 完成 |
 | **v0.2.0 examples/ 迁入** | meeting-agent + lakemind-connector 从 lakemind-examples 迁回主仓库 | ✅ 完成 |
+| **v0.2.1 Ray Serve 迁移** | ASR + embedding 从 ModelServing 迁入 Ray Serve（ray-worker 自定义镜像 + ray-deploy one-shot） | ✅ 完成 |
+| **v0.2.1 meeting-agent 修复** | entrypoint.sh retry + publish_skill.py upsert + seed_models.py 容错 + setup.py TENANT_ID + minutes.py 排序 + job cancel 状态机 | ✅ 完成 |
 | LakeMindStudio | Tauri 桌面客户端 | ❌ 未开始 |
 
 ---
 
 ## 2. 容器运行状态
 
-> 检查时间：2026-07-26
+> 检查时间：2026-08-02
 
 | 容器 | 端口 | 状态 | 用途 |
 |------|------|------|------|
 | lakemind-server-api | 10823 | ✅ Up | REST API + 10 引擎 |
-| lakemind-model-serving | 10824 | ✅ Up | 统一模型服务（litellm + fastembed + SenseVoice funasr） |
+| lakemind-model-serving | 10824 | ✅ Up | litellm LLM 网关 + 模型管理 API（ASR/embedding 已迁出） |
 | lakemind-postgres | 5432 | ✅ Up | Metadata Hub |
 | lakemind-seaweedfs | 8333 | ✅ Up | S3 对象存储 |
 | lakemind-valkey | 6379 | ✅ Up | TTL KV 缓存（BSD 3-Clause） |
-| lakemind-ray-head | 8265 | ✅ Up | Ray 主节点 |
-| lakemind-ray-worker-1 | — | ✅ Up | Ray 工作节点 |
-| lakemind-ray-worker-2 | — | ✅ Up | Ray 工作节点 |
+| lakemind-ray-head | 8265 | ✅ Up | Ray 主节点（--num-cpus=0，仅调度） |
+| lakemind-ray-worker-1 | — | ✅ Up | Ray 工作节点（自定义镜像，--num-cpus=6，ASR + embedding Serve） |
+| lakemind-ray-deploy | — | one-shot | Ray Serve 部署初始化（ASR + embedding deployments） |
 | lakemind-asset-mcp | 8401 | ✅ Up | 资产面 MCP（23 tools, 6 prompts, 11 resources） |
 | lakemind-data-mcp | 8402 | ✅ Up | 数据面 MCP（24 tools, 2 prompts, 6 resources） |
 | lakemind-admin-mcp | 8403 | ✅ Up | 管理面 MCP（21 tools, 2 prompts, 6 resources） |
 | lakemind-control-center | 3000 | ✅ Up | 统一管理入口（前端 + BFF:3001 + Steward:3002） |
 | meeting-agent | 9100 | ✅ Up | 会议 Agent 示例（可选） |
 
-**12 平台容器 + meeting-agent 全部运行正常，10 引擎全部健康。**
+**11 平台容器 + meeting-agent 全部运行正常。Ray Serve asr-app + embedding-app 均 RUNNING。**
 
 ### 引擎健康状态
 
@@ -218,11 +220,8 @@ memory:          True
 - ✅ FastAPI 服务（:10824）
 - ✅ litellm Router（多 provider 路由 + fallback，timeout=120s, num_retries=3）
 - ✅ Provider 实体（ms_providers 表，name/type/base_url/api_key，model 通过 provider_id 关联）
-- ✅ fastembed 本地嵌入（jina-embeddings-v2-base-zh, dim=768）
-- ✅ SenseVoice 本地 ASR（iic/SenseVoiceSmall, CPU, funasr + PyTorch，自带标点 + ITN）
-- ✅ fsmn-vad VAD + 30 领域 hotwords + ffmpeg loudnorm 归一化
-- ✅ ONNX 自定义后端已废弁（由 funasr 官方库替代）
 - ✅ OpenAI 兼容 API
+- ⚠️ ASR + embedding 已迁入 Ray Serve（models.yaml 中 asr/embedding enabled=false, ray_managed=true）
 
 ### 5.7 LakeMindStudio — 0%
 
@@ -238,8 +237,8 @@ memory:          True
 |---|------|------|--------|------|
 | 1 | 3 个 server_client.py 重复 | AssetMCP/DataMCP/AdminMCP 各有一份 | P2 | 后续版本提取共享包 |
 | 2 | 动态 Token 不跨 MCP 共享 | 静态 config.yaml Token，MVP 限制 | P2 | 已知限制 |
-| 3 | publish_skill.py 在容器内缺 yaml 包 | 容器内发布 skill 失败 | P3 | 不阻塞，从主机发布 |
-| 4 | Server skill register/publish API 无 PUT | 无法通过 API 更新 skill | P3 | 不阻塞 |
+| 3 | ~~publish_skill.py 在容器内缺 yaml 包~~ | ~~容器内发布 skill 失败~~ | ✅ 已修复（Dockerfile 加 pyyaml） |
+| 4 | ~~Server skill register/publish API 无 PUT~~ | ~~无法通过 API 更新 skill~~ | ✅ 已修复（改用 POST register upsert） |
 | 5 | Arrow 端点未接入 Knowledge outbox worker | 真实向量写入仍走 JSON | P1 | 待接入 |
 | 6 | ~~v4 改动通过 docker cp 部署~~ | 已修复，全部进入正式镜像 | ✅ 已修复 |
 | 7 | uvicorn workers>1 在 Docker Desktop 下异常 | IPv6 端口转发问题 | P3 | workers=1 可用 |
@@ -301,9 +300,10 @@ X-Tenant-Id: <tenant> / X-Agent-Id: <agent> / X-Scopes: asset,data,admin
 ### 7.5 Embedding
 
 ```
-provider: fastembed
-model: jinaai/jina-embeddings-v2-base-zh
+provider: Ray Serve (embedding-app)
+model: jinaai/jina-embeddings-v2-base-zh (fastembed)
 dim: 768
+deployment: serve.get_deployment_handle("embedding", "embedding-app")
 ```
 
 ### 7.6 LLM 网关
@@ -317,9 +317,11 @@ timeout: 120s, num_retries: 3
 ### 7.7 Ray
 
 ```
-head: lakemind-ray-head:8265
-workers: lakemind-ray-worker-1, lakemind-ray-worker-2
-CPU: 5 (head=1, worker=2×2)
+head: lakemind-ray-head:8265 (--num-cpus=0, 仅调度)
+worker: lakemind-ray-worker-1 (--num-cpus=6, 自定义镜像含 torch+funasr+fastembed)
+deploy: lakemind-ray-deploy (one-shot, 部署 asr-app + embedding-app)
+Serve: asr-app (1 replica, 2 CPU), embedding-app (1 replica, 1 CPU)
+总计: 6 CPU (head=0, worker=6)
 ```
 
 ### 7.8 ControlCenter
@@ -373,8 +375,10 @@ user: admin / tenant: ten_default / role: platform_admin
 | `LakeMindControlCenter/steward/` | Steward（LangGraph，内嵌） |
 | `LakeMindModelServing/src/lakemind_model_serving/gateway.py` | litellm Router 网关 |
 | `LakeMindServer/src/lakemind_server/plugins/storage/vector/lancedb.py` | LanceDB 引擎（每表锁 + Table 缓存） |
-| `LakeMindServer/src/lakemind_server/plugins/cognitive/memory/basic.py` | Memory 引擎（精确锁 LanceDB 临界区） |
+| `LakeMindServer/src/lakemind_server/plugins/cognitive/memory/basic.py` | Memory 引擎（精确锁 LanceDB 临界区，_embed 走 Ray Serve） |
 | `LakeMindServer/src/lakemind_server/api/vectors.py` | 向量 API（to_thread + add_arrow 端点） |
+| `LakeMindServer/src/lakemind_ray_deployments/deploy.py` | Ray Serve 部署脚本（ASR + embedding，内联类） |
+| `LakeMindServer/docker/ray-worker/Dockerfile` | Ray worker 自定义镜像（torch CPU + funasr + fastembed + ffmpeg） |
 
 ### 验证脚本
 

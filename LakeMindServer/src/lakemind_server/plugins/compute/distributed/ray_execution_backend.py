@@ -81,6 +81,7 @@ class RayExecutionBackend:
         env["MODELSERVING_API_KEY"] = os.environ.get("MODELSERVING_API_KEY", "lakemind-modelserving-key")
         env["SERVER_API_URL"] = os.environ.get("SERVER_API_URL", "http://lakemind-server-api:10823")
         env["SERVER_API_KEY"] = os.environ.get("SERVER_API_KEY", "ljLH3bvzIFjG4r3zeCP6AsHsGEnbmAQY_Hi3dW7du5o")
+        env["LAKEMIND_RAY_ADDRESS"] = "auto"
 
         runtime_env: dict[str, Any] = {"env_vars": env}
         pip_deps = os.environ.get("LAKEMIND_RAY_PIP_DEPS", "")

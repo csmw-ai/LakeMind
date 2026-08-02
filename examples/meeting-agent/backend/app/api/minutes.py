@@ -17,7 +17,7 @@ async def get_minutes(task_id: str, request: Request):
         if not row:
             raise HTTPException(status_code=404, detail="TASK_NOT_FOUND")
         versions = await db.execute_fetchall(
-            "SELECT * FROM meeting_minutes_versions WHERE task_id = ? ORDER BY version DESC",
+            "SELECT * FROM meeting_minutes_versions WHERE task_id = ? ORDER BY version ASC",
             (task_id,),
         )
         return {"versions": [dict(r) for r in versions]}

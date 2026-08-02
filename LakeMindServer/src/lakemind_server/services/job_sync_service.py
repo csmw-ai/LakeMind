@@ -211,8 +211,11 @@ class JobSyncService:
 
     def _update_attempt_status(self, attempt: dict, new_status: str) -> None:
         execute(
-            "UPDATE job_attempts SET status = %s, finished_at = CASE WHEN %s IN ('SUCCEEDED','FAILED','CANCELLED') THEN now() ELSE finished_at END WHERE attempt_id = %s",
-            (new_status, new_status, attempt["attempt_id"]),
+            "UPDATE job_attempts SET status = %s, "
+            "started_at = CASE WHEN %s = 'RUNNING' AND started_at IS NULL THEN now() ELSE started_at END, "
+            "finished_at = CASE WHEN %s IN ('SUCCEEDED','FAILED','CANCELLED') THEN now() ELSE finished_at END "
+            "WHERE attempt_id = %s",
+            (new_status, new_status, new_status, attempt["attempt_id"]),
         )
 
     def _collect_result(self, attempt: dict) -> None:

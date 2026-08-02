@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 import time
 import uuid
 import hashlib
@@ -44,6 +45,8 @@ class BasicMemory:
         self._lock = threading.Lock()
         self._lance_conns: dict = {}
         self._http_client = httpx.Client(timeout=30.0)
+        self._ray_embed_handle = None
+        self._ray_address = os.environ.get("LAKEMIND_RAY_ADDRESS", "ray-head:6379")
 
     def set_llm(self, llm):
         self._llm = llm
@@ -54,14 +57,13 @@ class BasicMemory:
             self._redis = redis.Redis(host=self._kv_host, port=self._kv_port, decode_responses=True)
 
     def _embed(self, text: str) -> list[float]:
-        resp = self._http_client.post(
-            f"{self._model_serving_url}/v1/embeddings",
-            json={"model": "jina-embeddings-v2-base-zh", "input": [text]},
-            headers={"Authorization": f"Bearer {self._model_serving_api_key}"},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["data"][0]["embedding"]
+        if self._ray_embed_handle is None:
+            import ray
+            from ray import serve
+            ray.init(address=self._ray_address, ignore_reinit_error=True)
+            self._ray_embed_handle = serve.get_deployment_handle("embedding", "embedding-app")
+        result = self._ray_embed_handle.embed.remote([text]).result()
+        return result[0]
 
     def _ensure_history(self):
         if not self._history_ready:

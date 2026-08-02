@@ -14,9 +14,9 @@
 | **对象存储** (SeaweedFS) | 音频 chunk、会议纪要、job 结果存取 | Server REST API `/api/v1/storage/objects` |
 | **Ray 分布式计算** | ASR/摘要/萃取全部通过 Ray job 执行 | Server REST API `/api/v1/compute/jobs/submit` |
 | **Skill 包管理** | meeting-processing Skill 打包上传 | S3 存储 + `ray.yaml` 声明 |
-| **ASR 语音识别** (faster-whisper) | Ray job: 音频 → 转写文本 | ModelServing `/v1/audio/transcriptions` (profile=`meeting-asr`) |
+| **ASR 语音识别** (SenseVoice) | Ray job: 音频 → 转写文本 | Ray Serve deployment `asr-app` |
 | **LLM 对话** (litellm) | Ray job: 转写 → 结构化纪要 + 知识萃取 | ModelServing `/v1/chat/completions` (profile=`meeting-minutes`) |
-| **Embedding** (fastembed) | Ray job: 知识向量化 + 入库 | ModelServing `/v1/embeddings` (profile=`meeting-embedding`) |
+| **Embedding** (fastembed) | 知识向量化 + 入库（Server 内部） | Ray Serve deployment `embedding-app` |
 | **向量存储** (LanceDB) | 知识点入库 + 相似度搜索 | Server REST API `/api/v1/storage/vectors` |
 | **记忆** (AssetMCP) | 会议结束记录 | AssetMCP `add_memory` |
 

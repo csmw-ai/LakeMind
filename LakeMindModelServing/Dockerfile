@@ -15,10 +15,6 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    uv pip install funasr
-
 FROM ${PYTHON_IMAGE} AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 ffmpeg && rm -rf /var/lib/apt/lists/*

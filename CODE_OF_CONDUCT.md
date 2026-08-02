@@ -32,7 +32,7 @@
 
 ## 联系
 
-如遇违反行为准则的情况，请通过 [GitHub Issues](https://github.com/anomalyco/LakeMind/issues) 私下联系项目维护者。
+如遇违反行为准则的情况，请通过 [GitHub Issues](https://github.com/csmw-ai/LakeMind/issues) 私下联系项目维护者。
 
 ---
 

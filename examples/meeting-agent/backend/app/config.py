@@ -12,6 +12,8 @@ DB_PATH = os.environ.get("DB_PATH", "/data/meeting-agent.db")
 SECRET_KEY = os.environ.get("SECRET_KEY", "meeting-agent-demo-secret-key")
 CHUNK_DURATION_MS = int(os.environ.get("CHUNK_DURATION_MS", "20000"))
 SUMMARIZE_INTERVAL = int(os.environ.get("SUMMARIZE_INTERVAL", "6"))
+ASR_CONCURRENCY = int(os.environ.get("ASR_CONCURRENCY", "3"))
+JOB_POLL_TIMEOUT = int(os.environ.get("JOB_POLL_TIMEOUT", "3600"))
 
 ASSET_MCP_URL = os.environ.get("ASSET_MCP_URL", "http://lakemind-asset-mcp:8401/mcp")
 DATA_MCP_URL = os.environ.get("DATA_MCP_URL", "http://lakemind-data-mcp:8402/mcp")

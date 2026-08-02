@@ -28,23 +28,22 @@ def upload_to_s3(uri: str, data: bytes | str):
     resp.raise_for_status()
 
 
-def asr(audio: bytes, filename: str = "audio.wav", profile: str = "meeting-asr") -> dict:
-    content_type = "audio/wav"
-    if filename.endswith(".webm"):
-        content_type = "audio/webm"
-    elif filename.endswith(".mp3"):
-        content_type = "audio/mpeg"
-    elif filename.endswith(".m4a"):
-        content_type = "audio/mp4"
-    resp = httpx.post(
-        f"{MS_URL}/v1/audio/transcriptions",
-        headers={"Authorization": f"Bearer {MS_KEY}"},
-        files={"file": (filename, audio, content_type)},
-        data={"model": profile},
-        timeout=300,
-    )
-    resp.raise_for_status()
-    return resp.json()
+_asr_handle = None
+
+
+def _get_asr_handle():
+    global _asr_handle
+    if _asr_handle is None:
+        import ray
+        from ray import serve
+        ray.init(address=os.environ.get("LAKEMIND_RAY_ADDRESS", "auto"), ignore_reinit_error=True)
+        _asr_handle = serve.get_deployment_handle("asr", "asr-app")
+    return _asr_handle
+
+
+def asr(audio: bytes, filename: str = "audio.wav") -> dict:
+    handle = _get_asr_handle()
+    return handle.transcribe.remote(audio, filename).result()
 
 
 def llm_chat(system_prompt: str, user_content: str, profile: str = "meeting-minutes") -> str:

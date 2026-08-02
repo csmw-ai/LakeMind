@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.2.1 (2026-08-02)
+
+### Summary
+ASR + embedding 推理迁入 Ray Serve，ModelServing 瘦身为 LLM 网关 + 模型管理 API。同步修复 meeting-agent 初始化、纪要刷新、Job 取消状态机。
+
+### Breaking Changes (vs v0.2.0)
+- **ASR/embedding 不再由 ModelServing 提供** — 迁入 Ray Serve（asr-app + embedding-app），通过 Ray Client 调用
+- **ray-worker 自定义镜像** — 基于 `rayproject/ray:2.41.0-py312` + torch CPU + funasr + fastembed + ffmpeg
+- **models.yaml** — asr/embedding `enabled: false`, `ray_managed: true`
+- **ModelServing Dockerfile** — 移除 torch/torchaudio/funasr 依赖
+
+### New Features
+
+#### Ray Serve 迁移
+- `LakeMindServer/src/lakemind_ray_deployments/deploy.py` — 内联 ASRDeployment + EmbeddingDeployment，`serve.run(dep.bind(), name, route_prefix)` 部署
+- `LakeMindServer/docker/ray-worker/Dockerfile` — torch CPU + funasr + fastembed + ffmpeg + librosa
+- `ray-deploy` one-shot 容器部署 Serve applications
+- 外部容器通过 Ray Client（`ray://lakemind-ray-head:10001`）+ `serve.get_deployment_handle()` + `.result()` 调用
+- `memory/basic.py` `_embed()` 和 `lakemind_utils.py` `asr()` 改用 Ray Serve handle
+- `ray_execution_backend.py` 传 `LAKEMIND_RAY_ADDRESS=auto`
+
+### Bug Fixes
+
+#### meeting-agent 初始化（6 fixes）
+- `entrypoint.sh` — POSIX sh 兼容 retry 函数（5 次重试 5s 间隔）
+- `publish_skill.py` — 去掉不存在的 PUT 端点，改为 POST register upsert
+- `seed_models.py` — `/v1/models` 超时容错（120s + 已有 profile skip）
+- `setup.py` — `TENANT_ID` 默认值 `retail` → `examples-meeting-agent`
+- `manifest.yaml` — `asr_chunk` job `model_profile` → `runtime: ray_serve` + `deployment: asr-app`
+- `pipeline_service.py` — 移除 `model_profile="meeting-asr"` dead param
+
+#### 其他修复
+- `minutes.py` — SQL `ORDER BY version DESC` → `ASC`（前端取 `minutes[-1]` = 最新版本，之前永远显示 v1）
+- `job_service.py` `cancel()` — QUEUED job 跳过 CANCELLING 中间态直接转 CANCELLED（状态机只允许 `QUEUED → CANCELLED`）
+
+#### GitHub 地址迁移
+- 7 个文件 `anomalyco`/`fdb-data` → `csmw-ai/LakeMind`（CONTRIBUTING/CODE_OF_CONDUCT/README/release-body/workflows/installation.md）
+
+---
+
 ## v0.2.0 (2026-07-26)
 
 ### Summary

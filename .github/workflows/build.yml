@@ -21,7 +21,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  NAMESPACE: fdb-data/lakemind
+  NAMESPACE: csmw-ai/lakemind
 
 concurrency:
   group: build-${{ github.ref }}

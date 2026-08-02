@@ -111,6 +111,7 @@ services:
       DATABASE_URL: "postgresql+psycopg2://${PG_USER:-lakemind}:${PG_PASSWORD:-lakemind_pass}@lakemind-postgres:5432/${PG_DB:-lakemind}"
       UVICORN_WORKERS: "${UVICORN_WORKERS:-2}"
       LAKEMIND_RAY_PIP_DEPS: "httpx"
+      LAKEMIND_RAY_ADDRESS: "ray://lakemind-ray-head:10001"
     ports:
       - "10823:10823"
     volumes:
@@ -139,7 +140,7 @@ services:
     container_name: lakemind-ray-head
     command: >
       ray start --head --port=6379 --dashboard-port=8265 --dashboard-host=0.0.0.0
-      --num-cpus=${RAY_HEAD_CPUS:-4} --block
+      --num-cpus=0 --block
     volumes:
       - ./LakeMindServer/data/lance:/data/lance
     networks: [lakemind]
@@ -153,20 +154,61 @@ services:
       start_period: 20s
 
   ray-worker:
-    image: ${RAY_IMAGE}
+    image: ${LAKEMIND_REGISTRY}/ray-worker:${LAKEMIND_VERSION}
     pull_policy: ${PULL_POLICY:-missing}
     command: >
       ray start --address=lakemind-ray-head:6379
-      --num-cpus=${RAY_WORKER_CPUS:-4} --block
+      --num-cpus=${RAY_WORKER_CPUS:-6} --block
+    environment:
+      - ASR_MODEL=${ASR_MODEL:-iic/SenseVoiceSmall}
+      - ASR_VAD_MODEL=${ASR_VAD_MODEL:-fsmn-vad}
+      - ASR_LANGUAGE=${ASR_LANGUAGE:-zh}
+      - ASR_DEVICE=${ASR_DEVICE:-cpu}
+      - ASR_INTRA_THREADS=${ASR_INTRA_THREADS:-2}
+      - ASR_INTER_THREADS=${ASR_INTER_THREADS:-1}
+      - ASR_USE_ITN=${ASR_USE_ITN:-true}
+      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-3}
+      - ASR_REPLICA_CPUS=${ASR_REPLICA_CPUS:-2}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-jinaai/jina-embeddings-v2-base-zh}
+      - EMBEDDING_CACHE_DIR=/data/fastembed_cache
+      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-2}
+      - EMBEDDING_REPLICA_CPUS=${EMBEDDING_REPLICA_CPUS:-1}
+      - MODELSCOPE_CACHE=/models/funasr_cache
+      - HF_HUB_OFFLINE=1
+      - PYTHONPATH=/app/deployments
     volumes:
       - ./LakeMindServer/data/lance:/data/lance
+      - ./LakeMindModelServing/data/asr-models:/models:ro
+      - ./LakeMindModelServing/data/fastembed_cache:/data/fastembed_cache
+      - ./LakeMindServer/src/lakemind_ray_deployments:/app/deployments:ro
     depends_on:
-      - ray-head
+      ray-head:
+        condition: service_healthy
     networks: [lakemind]
-    deploy:
-      replicas: 2
     profiles: [ray]
     restart: unless-stopped
+
+  ray-deploy:
+    image: ${LAKEMIND_REGISTRY}/ray-worker:${LAKEMIND_VERSION}
+    pull_policy: ${PULL_POLICY:-missing}
+    container_name: lakemind-ray-deploy
+    command: python /app/deployments/deploy.py
+    environment:
+      - LAKEMIND_RAY_ADDRESS=ray://lakemind-ray-head:10001
+      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-3}
+      - ASR_REPLICA_CPUS=${ASR_REPLICA_CPUS:-2}
+      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-2}
+      - EMBEDDING_REPLICA_CPUS=${EMBEDDING_REPLICA_CPUS:-1}
+    volumes:
+      - ./LakeMindServer/src/lakemind_ray_deployments:/app/deployments:ro
+    depends_on:
+      ray-head:
+        condition: service_healthy
+      ray-worker:
+        condition: service_started
+    networks: [lakemind]
+    profiles: [ray]
+    restart: "no"
 
   # ══════════════════════════════════════════════════════════════
   # 2. 运行平面 — 3 MCP（同一 mcp-suite 镜像，不同 command）
@@ -279,8 +321,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "6"
-          memory: 6G
+          cpus: "2"
+          memory: 2G
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:10824/health/ready')"]
       interval: 15s

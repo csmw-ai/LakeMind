@@ -21,7 +21,7 @@ asyncio.run(remember(
     "All WP0-WP6 code implemented: registration/login, task CRUD, audio chunk upload with idempotency+conflict detection, "
     "SSE, templates, transcript, minutes, knowledge review/publish, pipeline service. "
     "Security isolation verified (user A/B isolation, unauthenticated denied). "
-    "4 Model Profiles resolve successfully (meeting-asr/minutes/knowledge-extract/embedding). "
+    "2 LLM Model Profiles resolve successfully (meeting-minutes/knowledge-extract). ASR+embedding via Ray Serve. "
     "Fixes applied: (1) lake_client.py import path .config -> ..config, "
     "(2) security.py invited_by FK violation - check principal exists before using as invited_by, "
     "(3) deployment status set to 'enabled' for profile resolve to work. "

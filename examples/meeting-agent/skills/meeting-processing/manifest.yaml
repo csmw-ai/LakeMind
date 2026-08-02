@@ -10,14 +10,14 @@ output_schema:
   text: string
   segments: array
 model_profiles:
-  - meeting-asr
   - meeting-minutes
   - meeting-knowledge-extract
 
 jobs:
   asr_chunk:
     description: Audio chunk → transcript segments
-    model_profile: meeting-asr
+    runtime: ray_serve
+    deployment: asr-app
     inputs:
       chunk_uri: string
       result_key: string

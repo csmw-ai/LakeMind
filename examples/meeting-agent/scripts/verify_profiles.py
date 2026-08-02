@@ -6,7 +6,7 @@ async def main():
     ms_key = os.environ.get("MODELSERVING_API_KEY", "lakemind-modelserving-key")
     headers = {"Authorization": f"Bearer {ms_key}"}
     async with httpx.AsyncClient(base_url=ms_url, headers=headers, timeout=10) as c:
-        for p in ["meeting-asr", "meeting-minutes", "meeting-knowledge-extract", "meeting-embedding"]:
+        for p in ["meeting-minutes", "meeting-knowledge-extract"]:
             r = await c.get(f"/v1/profiles/{p}/resolve")
             if r.status_code == 200:
                 data = r.json()

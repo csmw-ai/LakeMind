@@ -12,23 +12,23 @@ MS_URL = os.environ.get("MODEL_SERVING_URL", "http://localhost:10824").rstrip("/
 MS_KEY = os.environ.get("MODELSERVING_API_KEY", "lakemind-modelserving-key")
 
 PROFILES = [
-    {"name": "meeting-asr", "model_type": "asr", "model_name": "sensevoice-small",
-     "description": "ASR for meeting transcription"},
     {"name": "meeting-minutes", "model_type": "chat", "model_name": "deepseek-v4-flash",
      "description": "LLM for meeting minutes"},
     {"name": "meeting-knowledge-extract", "model_type": "chat", "model_name": "deepseek-v4-flash",
      "description": "LLM for knowledge extraction"},
-    {"name": "meeting-embedding", "model_type": "embedding", "model_name": "jinaai/jina-embeddings-v2-base-zh",
-     "description": "Embedding for meeting knowledge"},
 ]
 
 
 async def main():
     headers = {"Authorization": f"Bearer {MS_KEY}"}
-    async with httpx.AsyncClient(base_url=MS_URL, headers=headers, timeout=30) as client:
-        existing_models = (await client.get("/v1/models")).json()
-        model_map = {m["name"]: m for m in existing_models.get("data", [])}
-        print(f"Existing models: {list(model_map.keys())}")
+    async with httpx.AsyncClient(base_url=MS_URL, headers=headers, timeout=60) as client:
+        try:
+            existing_models = (await client.get("/v1/models", timeout=120)).json()
+            model_map = {m["name"]: m for m in existing_models.get("data", [])}
+            print(f"Existing models: {list(model_map.keys())}")
+        except Exception as e:
+            print(f"[WARN] /v1/models unavailable ({e}), checking existing profiles only")
+            model_map = {}
 
         existing_profiles = (await client.get("/v1/profiles")).json()
         profile_map = {p["name"]: p for p in existing_profiles.get("data", [])}
@@ -36,6 +36,9 @@ async def main():
         for p in PROFILES:
             model = model_map.get(p["model_name"])
             if not model:
+                if p["name"] in profile_map:
+                    print(f"  [SKIP] profile '{p['name']}' already exists (model list unavailable)")
+                    continue
                 print(f"  [FAIL] model '{p['model_name']}' not found in ModelServing")
                 continue
 

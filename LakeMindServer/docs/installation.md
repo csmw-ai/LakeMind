@@ -52,7 +52,7 @@ docker info | grep -A5 "Registry Mirrors"
 
 ```bash
 # 假设仓库已 clone 到本地
-cd D:\fdb-data.site\LakeMind\LakeMindServer
+cd D:\csmw-ai.com\LakeMind\LakeMindServer
 ```
 
 目录结构：

@@ -6,21 +6,19 @@
 
 每个 job 是独立的 Ray 任务，代码在 `jobs/{name}/main.py`，通过 `ray.yaml` 声明 entrypoint。
 
-- **asr** (`jobs/asr/`): 音频 chunk → 转写文本（调用 ModelServing FunASR）
+- **asr** (`jobs/asr/`): 音频 chunk → 转写文本（调用 Ray Serve ASR）
 - **summarize** (`jobs/summarize/`): 转写文本 → 结构化纪要（调用 ModelServing LLM）
-- **extract** (`jobs/extract/`): 纪要 → 知识点 + 入库（调用 ModelServing LLM + embed + Server REST API）
+- **extract** (`jobs/extract/`): 纪要 → 知识点 + 入库（调用 ModelServing LLM + Server REST API）
 
 ## 共享工具
 
-- `lakemind_utils.py`: S3 存取、LLM 对话、ASR、嵌入、知识入库
+- `lakemind_utils.py`: S3 存取、LLM 对话、ASR
 
 ## 模型服务
 
-所有 LLM / ASR / Embedding 调用通过 LakeMindModelServing (:10824)，使用 **profile 名** 路由（管理员可在 ControlCenter UI 动态切换模型，无需改代码）：
-
-- ASR: `profile="meeting-asr"` → /v1/audio/transcriptions
-- LLM: `profile="meeting-minutes"` / `profile="meeting-knowledge-extract"` → /v1/chat/completions
-- Embedding: `profile="meeting-embedding"` → /v1/embeddings
+- ASR: Ray Serve deployment `asr-app`（`serve.get_deployment_handle("asr", "asr-app")`）
+- LLM: `profile="meeting-minutes"` / `profile="meeting-knowledge-extract"` → ModelServing /v1/chat/completions
+- Embedding: 由 Server 内部 AssetMCP 直接调用 Ray Serve `embedding-app`，示例不直接调用
 
 ## 运行方式
 

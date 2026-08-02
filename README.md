@@ -294,9 +294,9 @@ compute:
 
 ## 反馈与社区
 
-- **Bug 报告 / 功能请求**：[GitHub Issues](https://github.com/fdb-data/LakeMind/issues)
+- **Bug 报告 / 功能请求**：[GitHub Issues](https://github.com/csmw-ai/LakeMind/issues)
 - **代码贡献**：请阅读 [贡献指南](CONTRIBUTING.md)
-- **发布说明**：[v0.2.0 Release](https://github.com/fdb-data/LakeMind/releases/tag/v0.2.0)
+- **发布说明**：[v0.2.0 Release](https://github.com/csmw-ai/LakeMind/releases/tag/v0.2.0)
 
 ---
 

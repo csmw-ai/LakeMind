@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lakemind_client import LakeMindClient
 
 SKILL_NAME = "meeting-processing"
-TENANT_ID = os.environ.get("TENANT_ID", "retail")
+TENANT_ID = os.environ.get("TENANT_ID", "examples-meeting-agent")
 S3_BUCKET = "lakemind-filesets"
 SKILL_S3_URI = f"s3://{S3_BUCKET}/{TENANT_ID}/skills/{SKILL_NAME}.zip"
 

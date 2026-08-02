@@ -494,7 +494,7 @@ async def view_jobs_dashboard(request: Request):
         _cp_request("GET", "/api/v1/jobs", token, params={"status": "SUCCEEDED", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
         _cp_request("GET", "/api/v1/jobs", token, params={"status": "FAILED", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
         _cp_request("GET", "/api/v1/jobs", token, params={"status": "RUNNING", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
-        _cp_request("GET", "/api/v1/jobs", token, params={"status": "PENDING", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
+        _cp_request("GET", "/api/v1/jobs", token, params={"status": "QUEUED", "page_size": "1"}, request_id=rid, correlation_id=cid, tenant_id=tid),
         _cp_request("GET", "/api/v1/jobs", token, params={"page_size": "200"}, request_id=rid, correlation_id=cid, tenant_id=tid),
         return_exceptions=True,
     )

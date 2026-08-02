@@ -6,11 +6,20 @@ import uuid
 from datetime import datetime, timezone
 from ..security import AuthContext
 from ..db import get_db
-from ..config import SKILL_REF, SUMMARIZE_INTERVAL, S3_BUCKET, TENANT_ID
+from ..config import SKILL_REF, SUMMARIZE_INTERVAL, S3_BUCKET, TENANT_ID, ASR_CONCURRENCY, JOB_POLL_TIMEOUT
 from ..services.lake_client import lake, MCPError
 from ..services.sse_broker import sse_broker
 
 logger = logging.getLogger("meeting-agent")
+
+_asr_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_asr_semaphore() -> asyncio.Semaphore:
+    global _asr_semaphore
+    if _asr_semaphore is None:
+        _asr_semaphore = asyncio.Semaphore(ASR_CONCURRENCY)
+    return _asr_semaphore
 
 
 def _now() -> str:
@@ -21,101 +30,101 @@ class PipelineService:
 
     @staticmethod
     async def run_asr(ctx: AuthContext, task_id: str, sequence: int, chunk_uri: str, chunk_id: str):
-        try:
-            async for db in get_db():
-                await db.execute(
-                    "UPDATE meeting_audio_chunks SET asr_status = 'RUNNING' WHERE chunk_id = ?", (chunk_id,)
-                )
-                await db.commit()
-
-            stage_run_id = f"sr_{uuid.uuid4().hex[:12]}"
-            async for db in get_db():
-                await db.execute(
-                    """INSERT INTO meeting_stage_runs (stage_run_id, task_id, stage, status, started_at, created_at)
-                       VALUES (?, ?, 'asr', 'RUNNING', ?, ?)""",
-                    (stage_run_id, task_id, _now(), _now()),
-                )
-                await db.commit()
-
-            job = await lake.submit_job(
-                skill_ref=SKILL_REF,
-                inputs={"chunk_uri": chunk_uri, "result_key": f"asr/{sequence}"},
-                model_profile="meeting-asr",
-                idempotency_key=f"asr-{task_id}-{sequence}",
-                token=ctx.token,
-            )
-            job_id = job["job_id"]
-
-            async for db in get_db():
-                await db.execute(
-                    "UPDATE meeting_stage_runs SET job_id = ? WHERE stage_run_id = ?",
-                    (job_id, stage_run_id),
-                )
-                await db.commit()
-
-            await PipelineService._poll_job(job_id, ctx)
-
-            result_uri = chunk_uri.rsplit("/audio/chunks/", 1)[0] + f"/results/asr/{sequence}.json"
-            result_raw = await lake.s3_get(result_uri, token=ctx.token)
-            result = json.loads(result_raw)
-            segments = result.get("segments", [])
-            text = result.get("text", "")
-
-            async for db in get_db():
-                for seg in segments:
-                    seg_id = f"seg_{uuid.uuid4().hex[:12]}"
+        async with _get_asr_semaphore():
+            try:
+                async for db in get_db():
                     await db.execute(
-                        """INSERT INTO meeting_transcript_segments
-                           (segment_id, task_id, chunk_sequence, start_ms, end_ms, speaker_label,
-                            original_text, confidence, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (seg_id, task_id, sequence,
-                         seg.get("start_ms", 0), seg.get("end_ms", 0),
-                         seg.get("speaker", ""),
-                         seg.get("text", text), seg.get("confidence", 0.9),
-                         _now(), _now()),
+                        "UPDATE meeting_audio_chunks SET asr_status = 'RUNNING' WHERE chunk_id = ?", (chunk_id,)
                     )
-                if not segments and text:
-                    seg_id = f"seg_{uuid.uuid4().hex[:12]}"
+                    await db.commit()
+
+                stage_run_id = f"sr_{uuid.uuid4().hex[:12]}"
+                async for db in get_db():
                     await db.execute(
-                        """INSERT INTO meeting_transcript_segments
-                           (segment_id, task_id, chunk_sequence, original_text, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?)""",
-                        (seg_id, task_id, sequence, text, _now(), _now()),
+                        """INSERT INTO meeting_stage_runs (stage_run_id, task_id, stage, status, started_at, created_at)
+                           VALUES (?, ?, 'asr', 'RUNNING', ?, ?)""",
+                        (stage_run_id, task_id, _now(), _now()),
                     )
-                await db.execute(
-                    "UPDATE meeting_audio_chunks SET asr_status = 'SUCCEEDED' WHERE chunk_id = ?", (chunk_id,)
-                )
-                await db.execute(
-                    "UPDATE meeting_stage_runs SET status = 'SUCCEEDED', finished_at = ? WHERE stage_run_id = ?",
-                    (_now(), stage_run_id),
-                )
-                await db.commit()
+                    await db.commit()
 
-            await sse_broker.broadcast(task_id, "transcript.segment_ready", {
-                "sequence": sequence, "text": text, "segments": segments,
-            })
-
-            if sequence % SUMMARIZE_INTERVAL == 0:
-                asyncio.create_task(PipelineService._run_minutes_live(ctx, task_id))
-
-        except Exception as e:
-            err_msg = str(e)
-            if isinstance(e, MCPError):
-                err_msg = f"ASR MCP调用失败 [{e.stage}]: {e.message}"
-            else:
-                err_msg = f"ASR处理失败: {type(e).__name__}: {e}"
-            logger.error(f"ASR failed for task={task_id} seq={sequence}: {err_msg}")
-            async for db in get_db():
-                await db.execute(
-                    "UPDATE meeting_audio_chunks SET asr_status = 'FAILED' WHERE chunk_id = ?", (chunk_id,)
+                job = await lake.submit_job(
+                    skill_ref=SKILL_REF,
+                    inputs={"chunk_uri": chunk_uri, "result_key": f"asr/{sequence}"},
+                    idempotency_key=f"asr-{task_id}-{sequence}",
+                    token=ctx.token,
                 )
-                await db.execute(
-                    "UPDATE meeting_stage_runs SET status = 'FAILED', error_message = ?, finished_at = ? WHERE stage_run_id = ?",
-                    (err_msg, _now(), stage_run_id),
-                )
-                await db.commit()
-            await sse_broker.broadcast(task_id, "error", {"stage": "asr", "sequence": sequence, "message": err_msg})
+                job_id = job["job_id"]
+
+                async for db in get_db():
+                    await db.execute(
+                        "UPDATE meeting_stage_runs SET job_id = ? WHERE stage_run_id = ?",
+                        (job_id, stage_run_id),
+                    )
+                    await db.commit()
+
+                await PipelineService._poll_job(job_id, ctx)
+
+                result_uri = chunk_uri.rsplit("/audio/chunks/", 1)[0] + f"/results/asr/{sequence}.json"
+                result_raw = await lake.s3_get(result_uri, token=ctx.token)
+                result = json.loads(result_raw)
+                segments = result.get("segments", [])
+                text = result.get("text", "")
+
+                async for db in get_db():
+                    for seg in segments:
+                        seg_id = f"seg_{uuid.uuid4().hex[:12]}"
+                        await db.execute(
+                            """INSERT INTO meeting_transcript_segments
+                               (segment_id, task_id, chunk_sequence, start_ms, end_ms, speaker_label,
+                                original_text, confidence, created_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (seg_id, task_id, sequence,
+                             seg.get("start_ms", 0), seg.get("end_ms", 0),
+                             seg.get("speaker", ""),
+                             seg.get("text", text), seg.get("confidence", 0.9),
+                             _now(), _now()),
+                        )
+                    if not segments and text:
+                        seg_id = f"seg_{uuid.uuid4().hex[:12]}"
+                        await db.execute(
+                            """INSERT INTO meeting_transcript_segments
+                               (segment_id, task_id, chunk_sequence, original_text, created_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (seg_id, task_id, sequence, text, _now(), _now()),
+                        )
+                    await db.execute(
+                        "UPDATE meeting_audio_chunks SET asr_status = 'SUCCEEDED' WHERE chunk_id = ?", (chunk_id,)
+                    )
+                    await db.execute(
+                        "UPDATE meeting_stage_runs SET status = 'SUCCEEDED', finished_at = ? WHERE stage_run_id = ?",
+                        (_now(), stage_run_id),
+                    )
+                    await db.commit()
+
+                await sse_broker.broadcast(task_id, "transcript.segment_ready", {
+                    "sequence": sequence, "text": text, "segments": segments,
+                })
+
+                if sequence % SUMMARIZE_INTERVAL == 0:
+                    asyncio.create_task(PipelineService._run_minutes_live(ctx, task_id))
+
+            except Exception as e:
+                err_msg = str(e)
+                if isinstance(e, MCPError):
+                    err_msg = f"ASR MCP调用失败 [{e.stage}]: {e.message}"
+                else:
+                    err_msg = f"ASR处理失败: {type(e).__name__}: {e}"
+                logger.error(f"ASR failed for task={task_id} seq={sequence}: {err_msg}")
+                async for db in get_db():
+                    await db.execute(
+                        "UPDATE meeting_audio_chunks SET asr_status = 'FAILED' WHERE chunk_id = ?", (chunk_id,)
+                    )
+                    await db.execute(
+                        "UPDATE meeting_stage_runs SET status = 'FAILED', error_message = ?, finished_at = ? WHERE stage_run_id = ?",
+                        (err_msg, _now(), stage_run_id),
+                    )
+                    await db.commit()
+                await sse_broker.broadcast(task_id, "error", {"stage": "asr", "sequence": sequence, "message": err_msg})
 
     @staticmethod
     async def _run_minutes_live(ctx: AuthContext, task_id: str):
@@ -322,9 +331,11 @@ class PipelineService:
             pass
 
     @staticmethod
-    async def _poll_job(job_id: str, ctx: AuthContext, timeout: float = 900) -> dict:
-        elapsed = 0.0
-        while elapsed < timeout:
+    async def _poll_job(job_id: str, ctx: AuthContext, timeout: float = JOB_POLL_TIMEOUT) -> dict:
+        exec_elapsed = 0.0
+        queue_elapsed = 0.0
+        queue_timeout = timeout * 2
+        while True:
             job = await lake.get_job(job_id, token=ctx.token)
             status = job.get("status", "")
             if status in ("SUCCEEDED", "COMPLETED", "completed"):
@@ -332,6 +343,12 @@ class PipelineService:
                 return result.get("result", result)
             if status in ("FAILED", "CANCELLED", "LOST", "TIMED_OUT"):
                 raise RuntimeError(f"Job {job_id} status: {status}")
+            if status in ("RUNNING",):
+                exec_elapsed += 2
+                if exec_elapsed > timeout:
+                    raise RuntimeError(f"Job {job_id} timed out (exec {exec_elapsed}s)")
+            else:
+                queue_elapsed += 2
+                if queue_elapsed > queue_timeout:
+                    raise RuntimeError(f"Job {job_id} queue timed out ({queue_elapsed}s)")
             await asyncio.sleep(2)
-            elapsed += 2
-        raise RuntimeError(f"Job {job_id} timed out")

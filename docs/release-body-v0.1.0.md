@@ -40,7 +40,7 @@ python scripts/verify_full.py    # 286/286 PASS
 
 ## 反馈
 
-请在 [GitHub Issues](https://github.com/fdb-data/LakeMind/issues) 报告问题或提出建议。
+请在 [GitHub Issues](https://github.com/csmw-ai/LakeMind/issues) 报告问题或提出建议。
 
 ---
 

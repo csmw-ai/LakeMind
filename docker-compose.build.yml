@@ -23,3 +23,9 @@ services:
 
   control-center:
     image: lakemind/control-center:dev
+
+  ray-worker:
+    image: lakemind/ray-worker:dev
+
+  ray-deploy:
+    image: lakemind/ray-worker:dev

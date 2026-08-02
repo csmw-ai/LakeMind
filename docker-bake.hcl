@@ -50,13 +50,21 @@ target "control-center" {
   tags       = ["${REGISTRY}/control-center:${VERSION}"]
 }
 
+target "ray-worker" {
+  inherits   = ["_common"]
+  context    = "LakeMindServer/docker/ray-worker"
+  dockerfile = "Dockerfile"
+  tags       = ["${REGISTRY}/ray-worker:${VERSION}"]
+}
+
 group "core" {
   targets = [
     "postgres-age",
     "server-api",
     "mcp-suite",
     "model-serving",
-    "control-center"
+    "control-center",
+    "ray-worker"
   ]
 }
 

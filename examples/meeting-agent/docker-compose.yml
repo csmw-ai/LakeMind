@@ -17,6 +17,8 @@ services:
       ASSET_MCP_URL: http://lakemind-asset-mcp:8401/mcp
       DATA_MCP_URL: http://lakemind-data-mcp:8402/mcp
       MCP_TOKEN: meeting-agent-mcp-token
+      ASR_CONCURRENCY: "3"
+      JOB_POLL_TIMEOUT: "3600"
     volumes:
       - meeting-agent-data:/data
     networks:

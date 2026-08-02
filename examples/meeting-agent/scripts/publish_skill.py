@@ -57,36 +57,27 @@ async def main():
                 skill_id = s.get("asset_id") or s.get("skill_id")
                 break
 
-        if not skill_id:
-            body = {
-                "manifest": manifest,
-                "code_package": {"s3_uri": skill_s3_uri, "size_bytes": len(zip_bytes)},
-                "trust_level": "demo",
-            }
-            resp = await client.post("/api/v1/skills/register", json=body)
-            if resp.status_code == 200:
-                skill_id = resp.json().get("asset_id")
-                print(f"[OK] registered skill: {skill_id}")
-            else:
-                print(f"[FAIL] register: {resp.status_code} {resp.text}")
-                return
-        else:
-            body = {
-                "manifest": manifest,
-                "code_package": {"s3_uri": skill_s3_uri, "size_bytes": len(zip_bytes)},
-                "trust_level": "demo",
-            }
-            resp = await client.put(f"/api/v1/skills/{skill_id}", json=body)
-            if resp.status_code == 200:
-                print(f"[OK] updated skill: {skill_id}")
-            else:
-                print(f"[SKIP] update: {resp.status_code} {resp.text}")
-
-        resp = await client.post(f"/api/v1/skills/{skill_id}/publish")
+        body = {
+            "manifest": manifest,
+            "code_package": {"s3_uri": skill_s3_uri, "size_bytes": len(zip_bytes)},
+            "trust_level": "demo",
+        }
+        resp = await client.post("/api/v1/skills/register", json=body)
         if resp.status_code == 200:
-            print(f"[OK] published skill: {skill_id}")
+            skill_id = resp.json().get("asset_id") or skill_id
+            print(f"[OK] registered skill: {skill_id}")
         else:
-            print(f"[SKIP] publish: {resp.status_code} {resp.text}")
+            print(f"[WARN] register: {resp.status_code} {resp.text[:120]}")
+            if not skill_id:
+                print("[FAIL] skill not registered and not found in existing list")
+                return
+
+        if skill_id:
+            resp = await client.post(f"/api/v1/skills/{skill_id}/publish")
+            if resp.status_code == 200:
+                print(f"[OK] published skill: {skill_id}")
+            else:
+                print(f"[WARN] publish: {resp.status_code} {resp.text[:120]}")
 
 
 if __name__ == "__main__":

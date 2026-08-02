@@ -232,25 +232,26 @@ class JobService:
 
     def cancel(self, ctx: SecurityContext, job_id: str) -> dict:
         job = self.get_job(ctx, job_id)
-        if not can_transition(job["status"], "CANCELLING"):
-            raise ValueError(f"INVALID_TRANSITION: {job['status']} -> CANCELLING")
+        if not can_transition(job["status"], "CANCELLING") and not can_transition(job["status"], "CANCELLED"):
+            raise ValueError(f"INVALID_TRANSITION: {job['status']} -> CANCELLED")
 
-        execute(
-            "UPDATE job_runs SET status = 'CANCELLING', updated_at = now() WHERE job_id = %s",
-            (job_id,),
-        )
-        self._write_event(job_id, "cancelling", old_status=job["status"], new_status="CANCELLING")
-
-        if self._backend:
-            attempt = execute_one(
-                "SELECT ray_job_id FROM job_attempts WHERE job_id = %s AND status IN ('QUEUED','RUNNING') ORDER BY attempt_number DESC LIMIT 1",
+        if can_transition(job["status"], "CANCELLING"):
+            execute(
+                "UPDATE job_runs SET status = 'CANCELLING', updated_at = now() WHERE job_id = %s",
                 (job_id,),
             )
-            if attempt and attempt["ray_job_id"]:
-                try:
-                    self._backend.cancel(attempt["ray_job_id"])
-                except Exception:
-                    pass
+            self._write_event(job_id, "cancelling", old_status=job["status"], new_status="CANCELLING")
+
+            if self._backend:
+                attempt = execute_one(
+                    "SELECT ray_job_id FROM job_attempts WHERE job_id = %s AND status IN ('QUEUED','RUNNING') ORDER BY attempt_number DESC LIMIT 1",
+                    (job_id,),
+                )
+                if attempt and attempt["ray_job_id"]:
+                    try:
+                        self._backend.cancel(attempt["ray_job_id"])
+                    except Exception:
+                        pass
 
         execute(
             "UPDATE job_runs SET status = 'CANCELLED', updated_at = now(), finished_at = now() WHERE job_id = %s",

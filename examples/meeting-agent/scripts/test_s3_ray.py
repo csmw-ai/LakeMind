@@ -1,4 +1,4 @@
-import requests, base64, hashlib, struct, wave, io
+import requests, base64, hashlib, struct, wave, io, os
 
 SERVER_URL = "http://localhost:10823"
 SERVER_KEY = "ljLH3bvzIFjG4r3zeCP6AsHsGEnbmAQY_Hi3dW7du5o"
@@ -53,16 +53,17 @@ except Exception as e:
     # Maybe it's already raw binary
     print(f"Raw content RIFF: {r.content[:4]}, matches original={r.content == audio}")
 
-# Now test: send the decoded audio to ModelServing ASR
+# Now test: send the decoded audio to Ray Serve ASR
 if 'decoded' in dir():
     test_audio = decoded
 else:
     test_audio = r.content
 
-r2 = requests.post("http://localhost:10824/v1/audio/transcriptions",
-    headers={"Authorization": "Bearer lakemind-modelserving-key"},
-    files={"file": ("audio.wav", test_audio, "audio/wav")},
-    timeout=30)
-print(f"\nASR result: {r2.status_code} {r2.text[:200]}")
+import ray
+from ray import serve
+ray.init(address=os.environ.get("LAKEMIND_RAY_ADDRESS", "ray://lakemind-ray-head:10001"), ignore_reinit_error=True)
+asr_handle = serve.get_deployment_handle("asr", "asr-app")
+asr_result = asr_handle.transcribe.remote(test_audio, "audio.wav").result()
+print(f"\nASR result: {asr_result}")
 
 requests.delete(f"{BASE}/tasks/{task_id}", cookies=cookies)
