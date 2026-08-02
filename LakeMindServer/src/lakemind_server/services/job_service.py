@@ -261,9 +261,12 @@ class JobService:
             "UPDATE job_attempts SET status = 'CANCELLED', finished_at = now() WHERE job_id = %s AND status IN ('QUEUED','RUNNING')",
             (job_id,),
         )
-        self._write_event(job_id, "cancelled", old_status="CANCELLING", new_status="CANCELLED")
+        self._write_event(job_id, "cancelled", old_status=job["status"], new_status="CANCELLED")
 
-        AuditService.record(ctx, action="job.cancel", resource_type="job_run", resource_id=job_id)
+        AuditService.record(
+            event_type="job.cancel", principal_id=ctx.principal_id, tenant_id=ctx.tenant_id,
+            resource_id=job_id, action="job.cancel",
+        )
         return self.get_job(ctx, job_id)
 
     def retry(self, ctx: SecurityContext, job_id: str) -> dict:
@@ -324,7 +327,10 @@ class JobService:
                 self._write_event(job_id, "failed", attempt_id=attempt_id, old_status="QUEUED", new_status="FAILED",
                                   payload={"error": str(e)})
 
-        AuditService.record(ctx, action="job.retry", resource_type="job_run", resource_id=job_id)
+        AuditService.record(
+            event_type="job.retry", principal_id=ctx.principal_id, tenant_id=ctx.tenant_id,
+            resource_id=job_id, action="job.retry",
+        )
         return self.get_job(ctx, job_id)
 
     def get_result(self, ctx: SecurityContext, job_id: str) -> dict:
