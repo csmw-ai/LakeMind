@@ -1,9 +1,9 @@
-import asyncio, json
-from mcp.client.streamable_http import streamablehttp_client
+import asyncio, json, httpx
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 
 async def test():
-    async with streamablehttp_client("http://localhost:8402/mcp", headers={"Authorization": "Bearer meeting-agent-mcp-token"}) as (r,w,_):
+    async with streamable_http_client("http://localhost:8402/mcp", http_client=httpx.AsyncClient(headers={"Authorization": "Bearer meeting-agent-mcp-token"})) as (r,w):
         async with ClientSession(r,w) as s:
             await s.initialize()
             tools = await s.list_tools()
@@ -12,7 +12,7 @@ async def test():
             print(f"  ray_submit_job: {'ray_submit_job' in names}")
             print(f"  s3_put: {'s3_put' in names}")
 
-    async with streamablehttp_client("http://localhost:8401/mcp", headers={"Authorization": "Bearer meeting-agent-mcp-token"}) as (r,w,_):
+    async with streamable_http_client("http://localhost:8401/mcp", http_client=httpx.AsyncClient(headers={"Authorization": "Bearer meeting-agent-mcp-token"})) as (r,w):
         async with ClientSession(r,w) as s:
             await s.initialize()
             tools = await s.list_tools()

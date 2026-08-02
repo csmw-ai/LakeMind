@@ -69,12 +69,15 @@ async def health_checks(client: LakeMindClient):
         ok = False
 
     try:
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
         from mcp import ClientSession
-        async with streamablehttp_client(
+        import httpx
+        async with streamable_http_client(
             client.data_mcp_url,
-            headers={"Authorization": f"Bearer {client.mcp_token}"},
-        ) as (read, write, _):
+            http_client=httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {client.mcp_token}"},
+            ),
+        ) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = await session.list_tools()

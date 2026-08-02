@@ -52,17 +52,20 @@ class LakeMindClient:
     # ── MCP helper ──────────────────────────────────────────────
 
     async def _call_mcp(self, url: str, tool: str, arguments: dict) -> dict:
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
         from mcp import ClientSession
+        import httpx
 
-        async with streamablehttp_client(
+        async with streamable_http_client(
             url,
-            headers={"Authorization": f"Bearer {self.mcp_token}"},
-        ) as (read, write, _):
+            http_client=httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {self.mcp_token}"},
+            ),
+        ) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(tool, arguments=arguments)
-                if result.isError:
+                if result.is_error:
                     raise RuntimeError(f"MCP tool {tool} error: {result.content}")
                 text = result.content[0].text if result.content else "{}"
                 return json.loads(text)

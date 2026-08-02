@@ -27,23 +27,26 @@ def _unwrap_exception(e: Exception) -> str:
 
 
 async def _call_mcp(url: str, tool: str, arguments: dict, max_retries: int = 3) -> dict:
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
     from mcp import ClientSession
     import asyncio
+    import httpx
 
     last_exc: Exception | None = None
     for attempt in range(max_retries):
         try:
-            async with streamablehttp_client(
+            async with streamable_http_client(
                 url,
-                headers={"Authorization": f"Bearer {MCP_TOKEN}"},
+                http_client=httpx.AsyncClient(
+                    headers={"Authorization": f"Bearer {MCP_TOKEN}"},
+                    timeout=30,
+                ),
                 terminate_on_close=False,
-                timeout=30,
-            ) as (read, write, _):
+            ) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await session.call_tool(tool, arguments=arguments)
-                    if result.isError:
+                    if result.is_error:
                         err_text = result.content[0].text if result.content else "unknown error"
                         raise MCPError(tool, f"MCP tool returned error: {err_text}")
                     text = result.content[0].text if result.content else "{}"

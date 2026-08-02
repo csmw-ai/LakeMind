@@ -1,12 +1,14 @@
-import asyncio, json
-from mcp.client.streamable_http import streamablehttp_client
+import asyncio, json, httpx
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 
 async def remember(text, meta=None):
-    async with streamablehttp_client(
+    async with streamable_http_client(
         "http://localhost:8401/mcp",
-        headers={"Authorization": "Bearer tk_9d377e74c0c14969"},
-    ) as (r, w, _):
+        http_client=httpx.AsyncClient(
+            headers={"Authorization": "Bearer tk_9d377e74c0c14969"},
+        ),
+    ) as (r, w):
         async with ClientSession(r, w) as session:
             await session.initialize()
             await session.call_tool("add_memory", {
