@@ -12,7 +12,7 @@ MS_URL = os.environ.get("MODEL_SERVING_URL", "http://localhost:10824").rstrip("/
 MS_KEY = os.environ.get("MODELSERVING_API_KEY", "lakemind-modelserving-key")
 
 PROFILES = [
-    {"name": "meeting-asr", "model_type": "asr", "model_name": "whisper-small",
+    {"name": "meeting-asr", "model_type": "asr", "model_name": "sensevoice-small",
      "description": "ASR for meeting transcription"},
     {"name": "meeting-minutes", "model_type": "chat", "model_name": "deepseek-v4-flash",
      "description": "LLM for meeting minutes"},

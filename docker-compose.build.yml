@@ -21,8 +21,5 @@ services:
   model-serving:
     image: lakemind/model-serving:dev
 
-  asr-model-init:
-    image: lakemind/model-serving:dev
-
   control-center:
     image: lakemind/control-center:dev
