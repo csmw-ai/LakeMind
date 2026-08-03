@@ -20,8 +20,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  NAMESPACE: csmw-ai/lakemind
+  REGISTRY: ghcr.io/csmw-ai/lakemind
 
 concurrency:
   group: build-${{ github.ref }}
@@ -51,7 +50,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        target: [postgres-age, server-api, mcp-suite, model-serving, control-center]
+        target: [postgres-age, server-api, mcp-suite, model-serving, control-center, ray-worker]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -62,13 +61,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/bake-action@v5
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          VERSION: ${{ github.sha }}
         with:
           files: docker-bake.hcl
           targets: ${{ matrix.target }}
           push: ${{ github.event_name != 'pull_request' }}
           set: |
-            *.REGISTRY=${{ env.REGISTRY }}/${{ env.NAMESPACE }}
-            *.VERSION=${{ github.sha }}
             *.cache-from=type=gha,scope=${{ matrix.target }}
             *.cache-to=type=gha,mode=max,scope=${{ matrix.target }}
 
@@ -86,13 +86,21 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build frontend
+        run: |
+          cd examples/meeting-agent/frontend
+          npm install
+          npm run build
       - uses: docker/build-push-action@v6
         with:
           context: examples/meeting-agent
           file: examples/meeting-agent/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/meeting-agent:latest
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/meeting-agent:${{ github.sha }}
+            ${{ env.REGISTRY }}/meeting-agent:latest
+            ${{ env.REGISTRY }}/meeting-agent:${{ github.sha }}
           push: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha,scope=meeting-agent
           cache-to: type=gha,mode=max,scope=meeting-agent

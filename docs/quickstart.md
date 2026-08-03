@@ -59,7 +59,8 @@ python -c "from fastembed import TextEmbedding; m=TextEmbedding(model_name='jina
 docker buildx bake core --load
 docker compose -f docker-compose.yml -f docker-compose.build.yml --env-file .env --profile ray --profile all up -d --no-build
 
-# 或使用预构建镜像
+# 或使用预构建镜像（从 GHCR 拉取）
+docker compose --env-file .env --profile ray --profile all pull
 docker compose --env-file .env --profile ray --profile all up -d
 ```
 
