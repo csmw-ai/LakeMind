@@ -14,7 +14,7 @@ gateway:
 providers:
   - name: "modelarts"
     type: "openai"
-    base_url: "https://api.modelarts-maas.com/openai/v1"
+    base_url: "${MAAS_BASE_URL}"
     api_key: "${MAAS_API_KEY}"
   # - name: "openai"
   #   type: "openai"

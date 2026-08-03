@@ -21,7 +21,17 @@ cd LakeMind
 cp .env.example .env
 ```
 
-编辑 `.env`，填入你的 API Key 和密钥（详见文件内注释）。
+编辑 `.env`，填入以下配置：
+
+```bash
+# LLM Provider
+MAAS_BASE_URL=https://api.modelarts-maas.com/openai/v1   # 或 OpenAI/DeepSeek/Ollama
+MAAS_API_KEY=<your-llm-api-key>
+
+# 安全密钥（生成方法见注释）
+LAKEMIND_MASTER_KEY=<openssl rand -base64 32>    # 租户密钥加密主密钥
+SERVER_API_KEY=<openssl rand -hex 32>            # Server API 认证令牌
+```
 
 ## 2. 预下载模型（必须）
 
