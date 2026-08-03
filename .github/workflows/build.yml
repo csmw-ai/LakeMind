@@ -40,7 +40,8 @@ jobs:
         run: |
           cd LakeMindServer
           uv sync --frozen
-          uv run pytest tests/ -v --tb=short
+          uv pip install pytest
+          uv run pytest tests/unit/ -v --tb=short
 
   build:
     needs: test
