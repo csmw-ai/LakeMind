@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.2 (2026-08-02)
+
+### Summary
+文档刷新 + 示例安装优化 + 模型离线下载指南。无代码变更，纯文档版本。
+
+### Documentation
+- **`docs/model-offline-download.md`**（新增）— SenseVoice ASR + fsmn-vad + fastembed embedding 模型预下载完整指南，含一键脚本、验证步骤、国产镜像加速
+- **`README.md`** 重写 — 快速开始加入模型预下载步骤，容器表更新（Ray Serve 迁移），路线图加 v0.2.1/v0.2.2
+- **`docs/quickstart.md`** 重写 — 加入模型预下载步骤，简化启动流程
+- **`examples/README.md`** 重写 — 完整安装流程：克隆→配置→下载模型→启动平台→运行示例，Docker 部署优先，故障排查表
+- **`examples/meeting-agent/README.md`** 更新 — 架构图反映 Ray Serve 迁移，mcp 2.0.0 适配
+
+---
+
 ## v0.2.1 (2026-08-02)
 
 ### Summary

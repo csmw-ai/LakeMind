@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lakemind-asset-mcp"
-version = "0.2.1"
+version = "0.2.2"
 description = "LakeMind Asset MCP â€?èµ„äº§é?
 requires-python = ">=3.11"
 authors = [{ name = "LakeMind Team" }]

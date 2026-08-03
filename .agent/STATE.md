@@ -1,6 +1,6 @@
 # STATE.md — LakeMind 项目开发进展状态
 
-> 最后更新：2026-08-02（v0.2.1 发版：Ray Serve 迁移 + meeting-agent 修复）
+> 最后更新：2026-08-02（v0.2.2 发版：文档刷新 + 模型离线下载指南）
 > 总文件：`AGENTS.md`，设计规范：`.agent/DESIGN.md`，开发规范：`.agent/SPEC.md`
 
 ---
@@ -49,6 +49,7 @@
 | **v0.2.0 examples/ 迁入** | meeting-agent + lakemind-connector 从 lakemind-examples 迁回主仓库 | ✅ 完成 |
 | **v0.2.1 Ray Serve 迁移** | ASR + embedding 从 ModelServing 迁入 Ray Serve（ray-worker 自定义镜像 + ray-deploy one-shot） | ✅ 完成 |
 | **v0.2.1 meeting-agent 修复** | entrypoint.sh retry + publish_skill.py upsert + seed_models.py 容错 + setup.py TENANT_ID + minutes.py 排序 + job cancel 状态机 | ✅ 完成 |
+| **v0.2.2 文档刷新** | 模型离线下载指南 + README/quickstart/examples 重写 + CHANGELOG | ✅ 完成 |
 | LakeMindStudio | Tauri 桌面客户端 | ❌ 未开始 |
 
 ---
