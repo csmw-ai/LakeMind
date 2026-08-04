@@ -268,6 +268,7 @@ docker compose up -d --build
 
 - **Bug 报告 / 功能请求**：[GitHub Issues](https://github.com/csmw-ai/LakeMind/issues)
 - **讨论 / 交流**：[GitHub Discussions](https://github.com/csmw-ai/LakeMind/discussions)
+- **实时交流 / 答疑**：[Discord](https://discord.gg/REPLACE_WITH_YOUR_INVITE)（实时提问、反馈、社区唠嗑）
 - **代码贡献**：请阅读 [贡献指南](CONTRIBUTING.md)（提交 PR 即视为同意 [CLA](CLA.md)）
 
 ---
