@@ -2,6 +2,8 @@
 
 感谢你对 LakeMind 的关注！本文档说明如何参与项目开发。
 
+> 提交 Pull Request 即视为你同意 [LakeMind 贡献者许可协议 (CLA)](CLA.md)。
+
 ---
 
 ## 1. 报告 Bug

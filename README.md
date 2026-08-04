@@ -2,6 +2,8 @@
 
 > Agent 原生的多模态智能数据底座。面向企业内或者组织内的大量Agent提供统一存储、统一元数据、统一的认知计算与AI数据计算能力。
 
+[English](./README.en.md) ｜ License: Apache 2.0
+
 ---
 
 ## 你为什么必须要用 LakeMind？
@@ -30,7 +32,9 @@ LakeMind 是 **Agent 原生的多模态智能数据底座**（Agent-Native Multi
 
 Agent 通过 MCP 协议连接 LakeMind，获得**声明式资产访问**能力：不写 SQL，不调 SDK，不管存储——声明"我需要一个知识库"或"我需要回忆上次的经验"，LakeMind 自动路由到正确的引擎、正确的租户空间、正确的权限边界。
 
-**一句话定位**：LakeMind 是 Agent 时代的数据操作系统——就像 Kubernetes 是容器时代的操作系统一样。
+**一句话定位**：LakeMind 是 **Agent 原生的统一认知数据底座**——就像 Kubernetes 把"计算资源"统一调度给容器，LakeMind 把"认知数据"（知识 / 记忆 / 技能 / 本体 / 多模态数据）统一调度给 Agent。它不运行 Agent 的推理循环，而是让所有 Agent 共享同一套认知资产与数据平面。
+
+> **LakeMind 不是什么**：它不是通用的 Agent 运行时，不负责 Agent 的决策与自主行为；它是 Agent 之上的**统一认知数据层**——提供认知资产的存取与一套受控 Job Runtime，让 Agent 通过 MCP 声明式地"取用知识、沉淀记忆、调用技能"，而不必各自对接 5 种存储、6 套 SDK。
 
 ![LakeMind 概念总览](docs/LakeMind-Concept.png)
 
@@ -263,7 +267,8 @@ docker compose up -d --build
 ## 反馈与社区
 
 - **Bug 报告 / 功能请求**：[GitHub Issues](https://github.com/csmw-ai/LakeMind/issues)
-- **代码贡献**：请阅读 [贡献指南](CONTRIBUTING.md)
+- **讨论 / 交流**：[GitHub Discussions](https://github.com/csmw-ai/LakeMind/discussions)
+- **代码贡献**：请阅读 [贡献指南](CONTRIBUTING.md)（提交 PR 即视为同意 [CLA](CLA.md)）
 
 ---
 
@@ -281,4 +286,6 @@ docker compose up -d --build
 
 ## License
 
-Apache 2.0
+Apache 2.0。详见 [LICENSE](LICENSE)。
+
+商标 "LakeMind" 由 LakeMind 项目所有，详见 [TRADEMARK.md](TRADEMARK.md)。
