@@ -4,6 +4,12 @@
 
 [English](./README.en.md) ｜ License: Apache 2.0
 
+> 🚀 **在线 Demo（限时）**：不想本地重部署（Docker + Ray + ~1GB 模型）？直接试——
+> - Meeting Agent（会议录音 → ASR → 纪要 → 知识沉淀）：https://meet.agentmm.site/
+> - Control Center（数据看板）：https://cc.agentmm.site/
+>
+> 注：为控制云成本，云端 Demo 为**限时开放**，随时可能回收；长期部署请参考下方「快速开始」。
+
 ---
 
 ## 你为什么必须要用 LakeMind？
