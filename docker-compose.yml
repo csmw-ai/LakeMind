@@ -208,7 +208,7 @@ services:
         condition: service_started
     networks: [lakemind]
     profiles: [ray]
-    restart: "no"
+    restart: unless-stopped
 
   # ══════════════════════════════════════════════════════════════
   # 2. 运行平面 — 3 MCP（同一 mcp-suite 镜像，不同 command）

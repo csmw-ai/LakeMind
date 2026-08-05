@@ -156,6 +156,27 @@ def main():
     print(serve.status())
     print("Ray Serve deployments ready.")
 
+    while True:
+        time.sleep(60)
+        try:
+            status = serve.status()
+            apps = status.applications
+            asr_ok = "asr-app" in apps and apps["asr-app"].status.name == "RUNNING"
+            embed_ok = "embedding-app" in apps and apps["embedding-app"].status.name == "RUNNING"
+            if not (asr_ok and embed_ok):
+                print(f"Watchdog: apps missing (asr={asr_ok}, embed={embed_ok}), redeploying...")
+                serve.run(ASRDeployment.options(
+                    name="asr", num_replicas=asr_replicas,
+                    ray_actor_options={"num_cpus": asr_cpus},
+                ).bind(), name="asr-app", route_prefix="/asr")
+                serve.run(EmbeddingDeployment.options(
+                    name="embedding", num_replicas=embed_replicas,
+                    ray_actor_options={"num_cpus": embed_cpus},
+                ).bind(), name="embedding-app", route_prefix="/embedding")
+                print("Watchdog: redeploy triggered.")
+        except Exception as e:
+            print(f"Watchdog: status check failed: {e}")
+
 
 if __name__ == "__main__":
     main()
