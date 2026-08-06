@@ -276,6 +276,7 @@ docker compose up -d --build
 - **讨论 / 交流**：[GitHub Discussions](https://github.com/csmw-ai/LakeMind/discussions)
 - **实时交流 / 答疑**：[Discord](https://discord.gg/XmcWWDb5v)（实时提问、反馈、社区唠嗑）
 - **博客 / 教程**：[为什么多 Agent 系统需要一个「统一认知数据底座」？（掘金）](https://juejin.cn/post/7670367236265361443)
+- **知乎专栏**：[多 Agent 时代，数据基础设施该长什么样？](https://zhuanlan.zhihu.com/p/2068643955621812024)
 - **代码贡献**：请阅读 [贡献指南](CONTRIBUTING.md)（提交 PR 即视为同意 [CLA](CLA.md)）
 
 ---
