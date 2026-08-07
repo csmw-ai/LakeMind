@@ -1,3 +1,10 @@
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -6,7 +13,7 @@ RUN pip install --no-cache-dir "fastapi>=0.110" "uvicorn>=0.29" "httpx>=0.27" "a
 RUN pip install --no-cache-dir pyyaml
 
 COPY backend/ backend/
-COPY frontend/dist/ frontend/dist/
+COPY --from=frontend-builder /app/frontend/dist/ frontend/dist/
 COPY skills/ skills/
 COPY scripts/ scripts/
 
