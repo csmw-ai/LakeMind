@@ -1,7 +1,7 @@
 # LakeMind one-click deploy (Windows PowerShell)
 param([string]$Action = "")
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $RepoDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $RepoDir
 
