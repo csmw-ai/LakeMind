@@ -49,27 +49,27 @@ if ((Test-Path $asrModel) -and (Test-Path $embedCache)) {
 
 # 4. Pull images
 Step "4/7 Pull images (GHCR public, no login needed)"
-docker compose --env-file .env pull 2>&1
-if ($LASTEXITCODE -ne 0) { Warn "Some images failed to pull, trying anyway" }
-docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml pull 2>&1
-if ($LASTEXITCODE -ne 0) { Warn "meeting-agent image failed to pull, trying anyway" }
+Write-Host "  Pulling LakeMind images..."
+docker compose --env-file .env pull 2>&1 | ForEach-Object { Write-Host "  $_" }
+Write-Host "  Pulling meeting-agent image..."
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml pull 2>&1 | ForEach-Object { Write-Host "  $_" }
 Ok "Images ready"
 
-# 5. Start
+# 5. Start LakeMind
 Step "5/7 Start LakeMind"
-docker compose --env-file .env up -d --no-build
+docker compose --env-file .env up -d --no-build 2>&1 | ForEach-Object { Write-Host "  $_" }
 Ok "LakeMind containers started"
 
 # 6. Start meeting-agent
 Step "6/7 Start meeting-agent"
-docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml up -d --no-build 2>&1
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml up -d --no-build 2>&1 | ForEach-Object { Write-Host "  $_" }
 Ok "meeting-agent started"
 
 # 7. Wait for health
 Step "7/7 Wait for health"
-Write-Host "Waiting for all services (up to 180s)..."
+Write-Host "Waiting for all containers (up to 300s)..."
 $allHealthy = $false
-for ($i = 1; $i -le 36; $i++) {
+for ($i = 1; $i -le 60; $i++) {
     $output = docker compose --env-file .env ps --format json 2>&1
     $unhealthy = @()
     foreach ($line in $output) {
@@ -79,16 +79,37 @@ for ($i = 1; $i -le 36; $i++) {
         } catch {}
     }
     if ($unhealthy.Count -eq 0) {
-        Ok "All containers healthy"
+        Ok "All LakeMind containers healthy"
         $allHealthy = $true
         break
     }
-    Write-Host -NoNewline "`r  [$i/36] waiting: $($unhealthy -join ' ')"
+    Write-Host -NoNewline "`r  [$i/60] waiting: $($unhealthy -join ' ')   "
     Start-Sleep -Seconds 5
 }
-if (-not $allHealthy) { Warn "Some containers not healthy after 180s" }
+if (-not $allHealthy) { Warn "Some containers not healthy after 300s" }
 
-# Verify
+# Wait for Ray Serve apps
+Write-Host ""
+Write-Host "Waiting for Ray Serve apps (up to 180s)..."
+for ($i = 1; $i -le 36; $i++) {
+    try {
+        $rayStatus = docker exec lakemind-ray-head python -c "
+import ray; ray.init(address='auto', ignore_reinit_error=True, log_to_driver=False)
+from ray import serve
+s = serve.status()
+apps = {n: a.status.name for n, a in s.applications.items()}
+print(' '.join(f'{k}={v}' for k, v in apps.items()))
+" 2>&1
+        if ($rayStatus -match "asr-app=RUNNING" -and $rayStatus -match "embedding-app=RUNNING") {
+            Ok "Ray Serve apps ready (asr + embedding)"
+            break
+        }
+        Write-Host -NoNewline "`r  [$i/36] $rayStatus   "
+    } catch {}
+    Start-Sleep -Seconds 5
+}
+
+# Verify Server API
 Write-Host ""
 try {
     $null = Invoke-RestMethod -Uri "http://localhost:10823/api/v1/system/health" -TimeoutSec 5
@@ -111,4 +132,4 @@ Write-Host "  AdminMCP:       http://localhost:8403"
 Write-Host "===================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Verify: .\scripts\healthcheck.ps1"
-Write-Host "Stop:   docker compose --env-file .env down"
+Write-Host "Stop:   docker compose --env-file .env down; docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml down"

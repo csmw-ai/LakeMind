@@ -5,59 +5,67 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_DIR"
 
-# ─── 颜色 ───
+# ─── colors ───
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 step() { echo -e "\n${GREEN}=== $1 ===${NC}"; }
 
-# ─── 1. 前置检查 ───
-step "1/6 前置检查"
-command -v docker >/dev/null 2>&1 || fail "Docker 未安装。请先安装 Docker: https://docs.docker.com/get-docker/"
-docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 未安装"
-ok "Docker + Compose 已就绪"
+# ─── 1. Prerequisites ───
+step "1/7 Prerequisites"
+command -v docker >/dev/null 2>&1 || fail "Docker not installed. Install Docker first."
+docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 not installed"
+ok "Docker + Compose ready"
 
-# ─── 2. .env 检查 ───
-step "2/6 环境配置"
+# ─── 2. .env check ───
+step "2/7 Environment config"
 if [ ! -f .env ]; then
     python3 scripts/init_env.py
-    fail "请编辑 .env 填入 MAAS_API_KEY 后重新运行本脚本"
+    fail "Edit .env to fill MAAS_API_KEY, then re-run this script"
 fi
-grep -q 'MAAS_API_KEY=<' .env 2>/dev/null && fail "请在 .env 中填入 MAAS_API_KEY（你的 LLM API Key）"
-ok ".env 已配置"
+grep -q 'MAAS_API_KEY=<' .env 2>/dev/null && fail "Please fill MAAS_API_KEY in .env"
+ok ".env configured"
 
-# ─── 3. 模型检查 ───
-step "3/6 模型检查"
+# ─── 3. Model check ───
+step "3/7 Model check"
 ASR_MODEL="LakeMindModelServing/data/asr-models/asr/sensevoice-small"
 EMBED_CACHE="LakeMindModelServing/data/fastembed_cache"
 if [ -d "$ASR_MODEL" ] && [ -d "$EMBED_CACHE" ]; then
-    ok "模型已存在，跳过下载"
+    ok "Models exist, skip download"
 else
-    warn "模型未找到，需要下载（约 1GB，首次约 5-10 分钟）"
     if [ "${1:-}" = "--skip-models" ]; then
-        warn "跳过模型下载（--skip-models）"
+        warn "Skip model download"
     else
-        pip3 install modelscope fastembed 2>/dev/null || fail "无法安装 modelscope/fastembed，请检查 Python 环境"
-        python3 scripts/download_models.py || fail "模型下载失败"
-        ok "模型下载完成"
+        warn "Models not found, downloading (~1GB, 5-10 min)..."
+        pip3 install modelscope fastembed 2>/dev/null || fail "Cannot install modelscope/fastembed"
+        python3 scripts/download_models.py || fail "Model download failed"
+        ok "Models downloaded"
     fi
 fi
 
-# ─── 4. 拉取镜像 ───
-step "4/6 拉取镜像（GHCR 公开镜像，无需登录）"
-docker compose --env-file .env pull 2>&1 || warn "部分镜像拉取失败，尝试继续"
-ok "镜像就绪"
+# ─── 4. Pull images ───
+step "4/7 Pull images (GHCR public, no login needed)"
+echo "  Pulling LakeMind images..."
+docker compose --env-file .env pull 2>&1 || warn "Some images failed to pull"
+echo "  Pulling meeting-agent image..."
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml pull 2>&1 || warn "meeting-agent image failed to pull"
+ok "Images ready"
 
-# ─── 5. 启动 ───
-step "5/6 启动 LakeMind"
+# ─── 5. Start LakeMind ───
+step "5/7 Start LakeMind"
 docker compose --env-file .env up -d --no-build
-ok "容器已启动"
+ok "LakeMind containers started"
 
-# ─── 6. 等待健康 ───
-step "6/6 等待健康检查"
-echo "等待所有服务就绪（最多 180 秒）..."
-for i in $(seq 1 36); do
+# ─── 6. Start meeting-agent ───
+step "6/7 Start meeting-agent"
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml up -d --no-build
+ok "meeting-agent started"
+
+# ─── 7. Wait for health ───
+step "7/7 Wait for health"
+echo "Waiting for all containers (up to 300s)..."
+for i in $(seq 1 60); do
     UNHEALTHY=$(docker compose --env-file .env ps --format json 2>/dev/null | python3 -c "
 import sys, json
 for line in sys.stdin:
@@ -68,28 +76,48 @@ for line in sys.stdin:
     except: pass
 " 2>/dev/null)
     if [ -z "$UNHEALTHY" ]; then
-        ok "所有容器健康"
+        ok "All LakeMind containers healthy"
         break
     fi
-    printf "  [%2d/36] 等待: %s\r" "$i" "$(echo $UNHEALTHY | tr '\n' ' ')"
+    printf "  [%2d/60] waiting: %s\r" "$i" "$(echo $UNHEALTHY | tr '\n' ' ')"
     sleep 5
 done
 
-# ─── 验证 ───
+# Wait for Ray Serve apps
 echo ""
-HEALTH=$(curl -sf http://localhost:10823/api/v1/system/health 2>/dev/null) && ok "Server API 健康" || warn "Server API 未就绪"
+echo "Waiting for Ray Serve apps (up to 180s)..."
+for i in $(seq 1 36); do
+    RAY_STATUS=$(docker exec lakemind-ray-head python3 -c "
+import ray; ray.init(address='auto', ignore_reinit_error=True, log_to_driver=False)
+from ray import serve
+s = serve.status()
+apps = {n: a.status.name for n, a in s.applications.items()}
+print(' '.join(f'{k}={v}' for k, v in apps.items()))
+" 2>/dev/null || echo "")
+    if echo "$RAY_STATUS" | grep -q "asr-app=RUNNING" && echo "$RAY_STATUS" | grep -q "embedding-app=RUNNING"; then
+        ok "Ray Serve apps ready (asr + embedding)"
+        break
+    fi
+    printf "  [%2d/36] %s\r" "$i" "$RAY_STATUS"
+    sleep 5
+done
+
+# Verify Server API
+echo ""
+HEALTH=$(curl -sf http://localhost:10823/api/v1/system/health 2>/dev/null) && ok "Server API healthy" || warn "Server API not ready"
 
 echo ""
-echo "════════════════════════════════════════"
-echo -e "${GREEN}LakeMind 部署完成！${NC}"
-echo "════════════════════════════════════════"
+echo "==================================="
+echo -e "${GREEN}LakeMind deployed!${NC}"
+echo "==================================="
+echo "  Meeting Agent:  http://localhost:9100"
 echo "  ControlCenter:  http://localhost:3000"
 echo "  Server API:     http://localhost:10823"
 echo "  ModelServing:   http://localhost:10824"
 echo "  AssetMCP:       http://localhost:8401"
 echo "  DataMCP:        http://localhost:8402"
 echo "  AdminMCP:       http://localhost:8403"
-echo "════════════════════════════════════════"
+echo "==================================="
 echo ""
-echo "验证: ./scripts/healthcheck.sh"
-echo "停止: docker compose --env-file .env down"
+echo "Verify: ./scripts/healthcheck.sh"
+echo "Stop:   docker compose --env-file .env down && docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml down"
