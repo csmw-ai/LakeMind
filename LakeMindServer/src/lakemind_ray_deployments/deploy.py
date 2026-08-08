@@ -123,8 +123,8 @@ def main():
 
     serve.start(detached=True)
 
-    asr_replicas = int(os.environ.get("ASR_NUM_REPLICAS", "3"))
-    embed_replicas = int(os.environ.get("EMBEDDING_NUM_REPLICAS", "2"))
+    asr_replicas = int(os.environ.get("ASR_NUM_REPLICAS", "1"))
+    embed_replicas = int(os.environ.get("EMBEDDING_NUM_REPLICAS", "1"))
     asr_cpus = float(os.environ.get("ASR_REPLICA_CPUS", "2"))
     embed_cpus = float(os.environ.get("EMBEDDING_REPLICA_CPUS", "1"))
 

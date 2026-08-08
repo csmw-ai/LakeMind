@@ -167,11 +167,11 @@ services:
       - ASR_INTRA_THREADS=${ASR_INTRA_THREADS:-2}
       - ASR_INTER_THREADS=${ASR_INTER_THREADS:-1}
       - ASR_USE_ITN=${ASR_USE_ITN:-true}
-      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-3}
+      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-1}
       - ASR_REPLICA_CPUS=${ASR_REPLICA_CPUS:-2}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-jinaai/jina-embeddings-v2-base-zh}
       - EMBEDDING_CACHE_DIR=/data/fastembed_cache
-      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-2}
+      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-1}
       - EMBEDDING_REPLICA_CPUS=${EMBEDDING_REPLICA_CPUS:-1}
       - MODELSCOPE_CACHE=/models/funasr_cache
       - HF_HUB_OFFLINE=1
@@ -195,9 +195,9 @@ services:
     command: python /app/deployments/deploy.py
     environment:
       - LAKEMIND_RAY_ADDRESS=ray://lakemind-ray-head:10001
-      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-3}
+      - ASR_NUM_REPLICAS=${ASR_NUM_REPLICAS:-1}
       - ASR_REPLICA_CPUS=${ASR_REPLICA_CPUS:-2}
-      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-2}
+      - EMBEDDING_NUM_REPLICAS=${EMBEDDING_NUM_REPLICAS:-1}
       - EMBEDDING_REPLICA_CPUS=${EMBEDDING_REPLICA_CPUS:-1}
     volumes:
       - ./LakeMindServer/src/lakemind_ray_deployments:/app/deployments:ro
