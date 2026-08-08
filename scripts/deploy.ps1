@@ -11,7 +11,7 @@ function Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Green }
 
 # 1. Prerequisites
-Step "1/6 Prerequisites"
+Step "1/7 Prerequisites"
 $dockerOk = Get-Command docker -ErrorAction SilentlyContinue
 if (-not $dockerOk) { Fail "Docker not installed. Install Docker Desktop first." }
 $null = docker compose version 2>&1
@@ -19,7 +19,7 @@ if ($LASTEXITCODE -ne 0) { Fail "Docker Compose v2 not installed" }
 Ok "Docker + Compose ready"
 
 # 2. .env check
-Step "2/6 Environment config"
+Step "2/7 Environment config"
 if (-not (Test-Path .env)) {
     python scripts/init_env.py
     Fail "Edit .env to fill MAAS_API_KEY, then re-run this script"
@@ -29,7 +29,7 @@ if ($envContent -match 'MAAS_API_KEY=<') { Fail "Please fill MAAS_API_KEY in .en
 Ok ".env configured"
 
 # 3. Model check
-Step "3/6 Model check"
+Step "3/7 Model check"
 $asrModel = "LakeMindModelServing\data\asr-models\asr\sensevoice-small"
 $embedCache = "LakeMindModelServing\data\fastembed_cache"
 if ((Test-Path $asrModel) -and (Test-Path $embedCache)) {
@@ -48,18 +48,25 @@ if ((Test-Path $asrModel) -and (Test-Path $embedCache)) {
 }
 
 # 4. Pull images
-Step "4/6 Pull images (GHCR public, no login needed)"
+Step "4/7 Pull images (GHCR public, no login needed)"
 docker compose --env-file .env pull 2>&1
 if ($LASTEXITCODE -ne 0) { Warn "Some images failed to pull, trying anyway" }
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml pull 2>&1
+if ($LASTEXITCODE -ne 0) { Warn "meeting-agent image failed to pull, trying anyway" }
 Ok "Images ready"
 
 # 5. Start
-Step "5/6 Start LakeMind"
+Step "5/7 Start LakeMind"
 docker compose --env-file .env up -d --no-build
-Ok "Containers started"
+Ok "LakeMind containers started"
 
-# 6. Wait for health
-Step "6/6 Wait for health"
+# 6. Start meeting-agent
+Step "6/7 Start meeting-agent"
+docker compose --env-file .env -f examples/meeting-agent/docker-compose.yml up -d --no-build 2>&1
+Ok "meeting-agent started"
+
+# 7. Wait for health
+Step "7/7 Wait for health"
 Write-Host "Waiting for all services (up to 180s)..."
 $allHealthy = $false
 for ($i = 1; $i -le 36; $i++) {
@@ -94,6 +101,7 @@ Write-Host ""
 Write-Host "===================================" -ForegroundColor Green
 Write-Host "  LakeMind deployed!" -ForegroundColor Green
 Write-Host "===================================" -ForegroundColor Green
+Write-Host "  Meeting Agent:  http://localhost:9100"
 Write-Host "  ControlCenter:  http://localhost:3000"
 Write-Host "  Server API:     http://localhost:10823"
 Write-Host "  ModelServing:   http://localhost:10824"

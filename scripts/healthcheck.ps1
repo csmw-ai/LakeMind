@@ -45,3 +45,10 @@ catch { Write-Host "  FAIL" -ForegroundColor Red }
 Write-Host "`n=== ModelServing ===" -ForegroundColor Green
 try { $null = Invoke-RestMethod "http://localhost:10824/health/ready" -TimeoutSec 3; Write-Host "  OK" }
 catch { Write-Host "  FAIL" -ForegroundColor Red }
+
+Write-Host "`n=== Meeting Agent ===" -ForegroundColor Green
+try { $null = Invoke-RestMethod "http://localhost:9100/api/health" -TimeoutSec 3; Write-Host "  OK" }
+catch {
+    try { $r = Invoke-WebRequest "http://localhost:9100" -TimeoutSec 3 -UseBasicParsing; Write-Host "  OK (web UI)" }
+    catch { Write-Host "  FAIL" -ForegroundColor Red }
+}
